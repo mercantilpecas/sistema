@@ -299,31 +299,27 @@
                 setTimeout(() => setToast(t => ({ ...t, visible: false })), 4000);
             };
 
-            // 1. Inicializa o Firebase
-            useEffect(() => {
-                const initFirebase = async () => {
-                    if (!window.FirebaseAPI) return;
-                    
-                    try {
-                        // COLOQUE AS SUAS CHAVES DO FIREBASE AQUI QUANDO FOR HOSPEDAR NO GITHUB:
-                        const myFirebaseConfig = {
-                            apiKey: "AIzaSyAo0q2CmP8uIHNeaozoe4W2w7yoZrznWHU",
-                            authDomain: "mercantil-e-commerce.firebaseapp.com",
-                            projectId: "mercantil-e-commerce",
-                            storageBucket: "mercantil-e-commerce.firebasestorage.app",
-                            messagingSenderId: "375252406705",
-                            appId: "1:375252406705:web:61021d6a03b6c67a456d90"
-                        };
+            // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 
-                        // Pega config de teste interna ou usa a sua vazia (que falhará até vc preencher)
-                        const configToUse = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : myFirebaseConfig;
-                        
-                        const app = window.FirebaseAPI.initializeApp(configToUse);
-                        const fireAuth = window.FirebaseAPI.getAuth(app);
-                        const fireDb = window.FirebaseAPI.getFirestore(app);
-                        
-                        setAuth(fireAuth);
-                        setDb(fireDb);
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyAo0q2CmP8uIHNeaozoe4W2w7yoZrznWHU",
+  authDomain: "mercantil-e-commerce.firebaseapp.com",
+  projectId: "mercantil-e-commerce",
+  storageBucket: "mercantil-e-commerce.firebasestorage.app",
+  messagingSenderId: "375252406705",
+  appId: "1:375252406705:web:61021d6a03b6c67a456d90",
+  measurementId: "G-5SWWX561JJ"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 
                         // Lógica de Autenticação
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
