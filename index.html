@@ -60,6 +60,7 @@
             border-bottom-color: #3b82f6;
             outline: none;
         }
+        .custom-scroll { overflow-y: auto; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 transition-colors duration-200">
@@ -73,7 +74,7 @@
     </div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useMemo } = React;
 
         // --- HOOK CUSTOMIZADO PARA LOCALSTORAGE ---
         const useLocalStorage = (key, initialValue) => {
@@ -137,7 +138,7 @@
         };
 
         // --- COMPONENTES UI COMPARTILHADOS ---
-        const Modal = ({ title, children, onClose, onSave }) => (
+        const Modal = ({ title, children, onClose, onSave, extraButtons }) => (
             <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 fade-in p-4 backdrop-blur-sm">
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden border dark:border-slate-700">
                     <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900">
@@ -147,10 +148,13 @@
                     <div className="p-6 overflow-y-auto flex-1 dark:text-slate-200 custom-scroll">
                         {children}
                     </div>
-                    {onSave && (
-                        <div className="p-5 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex justify-end gap-3">
-                            <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-lg hover:bg-gray-300 dark:hover:bg-slate-600 font-medium transition">Cancelar</button>
-                            <button onClick={onSave} className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 font-medium shadow-md transition">Salvar Alterações</button>
+                    {(onSave || extraButtons) && (
+                        <div className="p-5 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex justify-between items-center">
+                            <div>{extraButtons}</div>
+                            <div className="flex gap-3">
+                                <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-lg hover:bg-gray-300 dark:hover:bg-slate-600 font-medium transition">Cancelar</button>
+                                {onSave && <button onClick={onSave} className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 font-medium shadow-md transition">Salvar Alterações</button>}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -162,34 +166,225 @@
             return (
                 <form onSubmit={e => { e.preventDefault(); onSave(data); }} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        {config.map(f => (
-                            <div key={f.name} className={f.full ? 'col-span-1 md:col-span-4' : (f.half ? 'col-span-1 md:col-span-2' : 'col-span-1')}>
-                                <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wider">{f.label}</label>
-                                <div className="flex gap-2">
-                                    {f.type === 'select' ? (
-                                        <select required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})}>
-                                            <option value="">Selecione...</option>
-                                            {f.options && f.options.map((o, idx) => <option key={idx} value={o}>{o}</option>)}
-                                        </select>
-                                    ) : f.type === 'textarea' ? (
-                                        <textarea required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} rows="3" placeholder={f.placeholder || ''} />
-                                    ) : (
-                                        <input required={f.required} type={f.type||'text'} step={f.step} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} readOnly={f.readOnly} placeholder={f.placeholder || ''} />
-                                    )}
-                                    {f.button && (
-                                        <button type="button" onClick={() => f.action(setData)} className="bg-mercantil-blue text-white px-4 py-2 rounded shadow hover:bg-blue-800 whitespace-nowrap text-sm font-bold flex items-center transition">
-                                            <i className={`${f.icon || "fas fa-bolt"} mr-2`}></i> {f.button}
-                                        </button>
-                                    )}
+                        {config.map(f => {
+                            // Calcula a largura da coluna no grid (full=4, threeQuarters=3, half=2, default=1)
+                            const colClass = f.full ? 'col-span-1 md:col-span-4' : 
+                                             f.threeQuarters ? 'col-span-1 md:col-span-3' : 
+                                             f.half ? 'col-span-1 md:col-span-2' : 
+                                             'col-span-1';
+                            return (
+                                <div key={f.name} className={colClass}>
+                                    <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wider">{f.label}</label>
+                                    <div className="flex gap-2">
+                                        {f.type === 'select' ? (
+                                            <select required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})}>
+                                                <option value="">Selecione...</option>
+                                                {f.options && f.options.map((o, idx) => <option key={idx} value={o}>{o}</option>)}
+                                            </select>
+                                        ) : f.type === 'textarea' ? (
+                                            <textarea required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} rows="3" placeholder={f.placeholder || ''} />
+                                        ) : (
+                                            <input required={f.required} type={f.type||'text'} min={f.min} step={f.step} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} readOnly={f.readOnly} placeholder={f.placeholder || ''} />
+                                        )}
+                                        {f.button && (
+                                            <button type="button" onClick={() => f.action(setData)} className="bg-mercantil-blue text-white px-4 py-2 rounded shadow hover:bg-blue-800 whitespace-nowrap text-sm font-bold flex items-center transition">
+                                                <i className={`${f.icon || "fas fa-bolt"} mr-2`}></i> {f.button}
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                     <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700">
                         <button type="button" onClick={onCancel} className="px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium">Cancelar</button>
                         <button type="submit" className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex items-center transition"><i className="fas fa-save mr-2"></i> Salvar Registro</button>
                     </div>
                 </form>
+            );
+        };
+
+        // --- COMPONENTE TAREFAS (NOVO - Kanban/Pipedrive style) ---
+        const TarefasManager = ({ tarefas, setTarefas, db, showToast }) => {
+            const [modalData, setModalData] = useState(null);
+            
+            const handleSave = (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData.entries());
+                const newTask = {
+                    ...data,
+                    id: modalData.id || `TRF-${Date.now()}`,
+                    dataCriacao: modalData.dataCriacao || new Date().toISOString()
+                };
+
+                if (modalData.id) {
+                    setTarefas(tarefas.map(t => t.id === modalData.id ? newTask : t));
+                    showToast('Tarefa atualizada com sucesso!');
+                } else {
+                    setTarefas([newTask, ...tarefas]);
+                    showToast('Nova tarefa criada!');
+                }
+                setModalData(null);
+            };
+
+            const changeStatus = (id, newStatus) => {
+                setTarefas(tarefas.map(t => t.id === id ? { ...t, status: newStatus } : t));
+                if(newStatus === 'Concluída') showToast('Tarefa concluída!', 'success');
+            };
+
+            const deleteTask = (id) => {
+                if(window.confirm('Excluir esta tarefa permanentemente?')) {
+                    setTarefas(tarefas.filter(t => t.id !== id));
+                    showToast('Tarefa excluída.', 'success');
+                }
+            };
+
+            // Lógica para vínculo dinâmico de qualquer área do sistema
+            const getLinkOptions = (tipo) => {
+                switch(tipo) {
+                    case 'Produtos': return db.produtos.filter(p=>p.SKU).map(p => ({ id: p.SKU, label: `${p.SKU} - ${p['Título']?.substring(0,30)}` }));
+                    case 'Kits': return db.kits.filter(k=>k.SKU).map(k => ({ id: k.SKU, label: `${k.SKU} - ${k['Título']?.substring(0,30)}` }));
+                    case 'CRM (Atendimentos)': return db.atendimentos.filter(a=>a.protocolo).map(a => ({ id: a.protocolo, label: `${a.protocolo} - ${a.cliente}` }));
+                    case 'Qualidade': return db.qualidade.filter(q=>q.data).map(q => ({ id: q.id, label: `NC: ${q.data} - ${q.tipo}` }));
+                    case 'Marketing': return db.marketing.filter(m=>m.data).map(m => ({ id: m.id, label: `Pauta: ${m.data} - ${m.plataforma}` }));
+                    case 'Fretes': return db.fretes.filter(f=>f.city).map(f => ({ id: f.id, label: `Frete: ${f.city} (${f.cepStart})` }));
+                    default: return [];
+                }
+            };
+
+            const TaskCard = ({ task }) => {
+                const priorityColors = { 'Alta': 'border-l-red-500', 'Média': 'border-l-yellow-500', 'Baixa': 'border-l-blue-500' };
+                const bgColors = { 'Pendente': 'bg-white dark:bg-slate-800', 'Em Andamento': 'bg-blue-50 dark:bg-slate-750', 'Concluída': 'bg-gray-100 dark:bg-slate-900 opacity-60' };
+                
+                return (
+                    <div className={`${bgColors[task.status]} rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 p-4 border-l-4 ${priorityColors[task.prioridade] || 'border-l-gray-400'} hover:shadow-md transition cursor-pointer relative group`} onClick={() => setModalData(task)}>
+                        <div className="flex justify-between items-start mb-2">
+                            <h4 className="font-bold text-sm text-gray-800 dark:text-white leading-tight pr-6">{task.titulo}</h4>
+                            <span className="text-xs font-bold text-gray-400">{task.dataLimite ? new Date(task.dataLimite).toLocaleDateString() : ''}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mb-3">{task.descricao}</p>
+                        
+                        {task.vinculoTipo && task.vinculoId && (
+                            <div className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-slate-700 rounded text-[10px] font-bold text-gray-600 dark:text-gray-300 mb-3">
+                                <i className="fas fa-link"></i> {task.vinculoTipo}: {task.vinculoId.substring(0,15)}
+                            </div>
+                        )}
+
+                        <div className="flex items-center gap-2 mt-auto" onClick={e => e.stopPropagation()}>
+                            {task.status !== 'Pendente' && <button onClick={()=>changeStatus(task.id, 'Pendente')} className="flex-1 py-1 text-xs font-bold rounded border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700">Pendente</button>}
+                            {task.status !== 'Em Andamento' && task.status !== 'Concluída' && <button onClick={()=>changeStatus(task.id, 'Em Andamento')} className="flex-1 py-1 text-xs font-bold rounded bg-mercantil-blue text-white hover:bg-blue-800 shadow-sm">Iniciar</button>}
+                            {task.status !== 'Concluída' && <button onClick={()=>changeStatus(task.id, 'Concluída')} className="flex-1 py-1 text-xs font-bold rounded bg-green-600 text-white hover:bg-green-700 shadow-sm"><i className="fas fa-check"></i> Concluir</button>}
+                        </div>
+                        
+                        <button onClick={(e)=>{e.stopPropagation(); deleteTask(task.id);}} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><i className="fas fa-trash text-xs"></i></button>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="flex flex-col h-full fade-in">
+                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex justify-between items-center rounded-t-xl">
+                        <div>
+                            <h2 className="text-xl font-bold text-mercantil-dark dark:text-white flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-center text-mercantil-orange"><i className="fas fa-check-square"></i></div>
+                                Gestão de Tarefas
+                            </h2>
+                            <p className="text-sm text-gray-500 mt-1">Quadro Kanban integrado com todas as áreas do ERP.</p>
+                        </div>
+                        <button onClick={() => setModalData({ status: 'Pendente', prioridade: 'Média' })} className="bg-mercantil-blue hover:bg-blue-800 text-white px-5 py-2.5 rounded-lg font-bold transition shadow-sm flex items-center">
+                            <i className="fas fa-plus mr-2"></i> Nova Tarefa
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-x-auto p-6 bg-gray-100 dark:bg-slate-900 custom-scroll rounded-b-xl border border-t-0 border-gray-200 dark:border-slate-700">
+                        <div className="flex gap-6 min-w-max h-full">
+                            {['Pendente', 'Em Andamento', 'Concluída'].map(coluna => {
+                                const columnTasks = tarefas.filter(t => t.status === coluna);
+                                return (
+                                    <div key={coluna} className="w-80 flex flex-col h-full">
+                                        <div className={`mb-3 pb-2 border-b-2 font-bold text-sm text-gray-600 dark:text-gray-300 flex justify-between items-center ${coluna === 'Pendente' ? 'border-gray-400' : coluna === 'Em Andamento' ? 'border-mercantil-blue' : 'border-green-500'}`}>
+                                            <span className="uppercase tracking-wider">{coluna}</span>
+                                            <span className="bg-white dark:bg-slate-800 text-xs px-2 py-1 rounded shadow-sm">{columnTasks.length}</span>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto space-y-3 custom-scroll pr-2 pb-4">
+                                            {columnTasks.map(task => <TaskCard key={task.id} task={task} />)}
+                                            {columnTasks.length === 0 && <div className="text-center p-4 text-xs font-medium text-gray-400 border border-dashed border-gray-300 dark:border-slate-700 rounded-lg">Nenhuma tarefa</div>}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {modalData && (
+                        <Modal title={modalData.id ? 'Editar Tarefa' : 'Nova Tarefa'} onClose={() => setModalData(null)}>
+                            <form id="taskForm" onSubmit={handleSave} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="md:col-span-2">
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Título da Tarefa *</label>
+                                        <input type="text" name="titulo" required defaultValue={modalData.titulo} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue dark:bg-slate-900 dark:border-slate-600 dark:text-white" placeholder="O que precisa ser feito?" />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Descrição</label>
+                                        <textarea name="descricao" rows="3" defaultValue={modalData.descricao} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue dark:bg-slate-900 dark:border-slate-600 dark:text-white" placeholder="Detalhes da tarefa..."></textarea>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Status</label>
+                                        <select name="status" defaultValue={modalData.status} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white">
+                                            <option value="Pendente">Pendente</option>
+                                            <option value="Em Andamento">Em Andamento</option>
+                                            <option value="Concluída">Concluída</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Prioridade</label>
+                                        <select name="prioridade" defaultValue={modalData.prioridade} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white">
+                                            <option value="Baixa">Baixa</option>
+                                            <option value="Média">Média</option>
+                                            <option value="Alta">Alta</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Prazo / Data Limite</label>
+                                        <input type="date" name="dataLimite" defaultValue={modalData.dataLimite} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white" />
+                                    </div>
+                                    
+                                    <div className="md:col-span-2 border-t border-gray-200 dark:border-slate-700 pt-4 mt-2">
+                                        <h4 className="text-sm font-bold text-mercantil-blue dark:text-blue-400 mb-3"><i className="fas fa-link mr-2"></i>Vincular a um registro do sistema (Opcional)</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Módulo / Área</label>
+                                                <select name="vinculoTipo" defaultValue={modalData.vinculoTipo || ''} onChange={(e) => setModalData({...modalData, vinculoTipo: e.target.value, vinculoId: ''})} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white">
+                                                    <option value="">Nenhum Vínculo</option>
+                                                    <option value="Produtos">Produtos / Peças</option>
+                                                    <option value="Kits">Kits</option>
+                                                    <option value="CRM (Atendimentos)">CRM (Atendimentos)</option>
+                                                    <option value="Qualidade">Qualidade (NCs)</option>
+                                                    <option value="Marketing">Marketing</option>
+                                                    <option value="Fretes">Fretes</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Registro Específico</label>
+                                                <select name="vinculoId" value={modalData.vinculoId || ''} onChange={(e) => setModalData({...modalData, vinculoId: e.target.value})} disabled={!modalData.vinculoTipo} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white disabled:bg-gray-100 disabled:dark:bg-slate-800">
+                                                    <option value="">Selecione o registro...</option>
+                                                    {getLinkOptions(modalData.vinculoTipo).map(opt => (
+                                                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700">
+                                    <button type="button" onClick={() => setModalData(null)} className="px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium">Cancelar</button>
+                                    <button type="submit" className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex items-center transition"><i className="fas fa-save mr-2"></i> Salvar Tarefa</button>
+                                </div>
+                            </form>
+                        </Modal>
+                    )}
+                </div>
             );
         };
 
@@ -342,7 +537,6 @@
                 }
             };
 
-            // Adaptação para aceitar Universal (XLSX, XLS, CSV) na base de fretes
             const handleImportUniversal = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -567,6 +761,7 @@
             const [gerencia, setGerencia] = useLocalStorage('mrc_gerencia', []);
             const [compliance, setCompliance] = useLocalStorage('mrc_compliance', []);
             const [fretes, setFretes] = useLocalStorage('mrc_fretes', []);
+            const [tarefas, setTarefas] = useLocalStorage('mrc_tarefas', []); // NOVO ESTADO DE TAREFAS
             const [lastBackup, setLastBackup] = useLocalStorage('mrc_last_backup_time', null);
 
             useEffect(() => {
@@ -576,7 +771,8 @@
 
             useEffect(() => {
                 const forceSystemBackup = () => {
-                    const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes };
+                    // TAREFAS ADICIONADAS AO DUMP GERAL E AUTOMÁTICO
+                    const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas };
                     localStorage.setItem('mrc_auto_backup_dump', JSON.stringify(fullSystemDump));
                     setLastBackup(new Date().toISOString());
                 };
@@ -589,7 +785,7 @@
                     }
                 }, 60000);
                 return () => clearInterval(intervalId);
-            }, [produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, lastBackup, setLastBackup]);
+            }, [produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas, lastBackup, setLastBackup]);
 
             const saveStateRecord = (data, stateArray, setter) => {
                 const arr = [...(stateArray || [])];
@@ -604,7 +800,6 @@
                 showToast('Registro excluído!', 'success');
             };
 
-            // --- IMPORTAÇÃO UNIVERSAL (SheetJS) PARA PRODUTOS E KITS ---
             const handleUploadUniversal = (e, type) => {
                 const file = e.target.files[0];
                 if(!file) return;
@@ -627,11 +822,8 @@
 
                         const processedData = json.map((row, index) => {
                             let obj = { ...row };
-                            // Garante IDs consistentes
                             if (!obj.id && !obj.ID) obj.id = `IMP-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`;
                             if (obj.ID) { obj.id = obj.ID; delete obj.ID; } 
-                            
-                            // Normalização básica de strings
                             if(typeof obj.Observações === 'string') obj.Observações = obj.Observações.replace(/\\n/g, '\n');
                             if(typeof obj['EAN/GTIN'] === 'string') obj['EAN/GTIN'] = obj['EAN/GTIN'].replace(/\\n/g, '\n');
                             return obj;
@@ -657,19 +849,9 @@
             };
 
             // --- CONFIGURAÇÕES DE FORMULÁRIOS DINÂMICAS ---
-            
-            // Opções dinâmicas para o CRM baseadas nos cadastros existentes
-            const produtoOptions = produtos && produtos.length > 0 
-                ? produtos.filter(p => p.SKU).map(p => `${p.SKU} - ${p['Título'] ? p['Título'].substring(0,30) + '...' : 'Sem Título'}`) 
-                : [];
-                
-            const kitOptions = kits && kits.length > 0 
-                ? kits.filter(k => k.SKU).map(k => `${k.SKU} - ${k['Título'] ? k['Título'].substring(0,30) + '...' : 'Sem Título'}`) 
-                : [];
-                
-            const freteOptions = fretes && fretes.length > 0 
-                ? fretes.filter(f => f.city).map(f => `${f.city} (CEP: ${f.cepStart} a ${f.cepEnd}) - R$ ${f.price || '0,00'}`) 
-                : [];
+            const produtoOptions = produtos && produtos.length > 0 ? produtos.filter(p => p.SKU).map(p => `${p.SKU} - ${p['Título'] ? p['Título'].substring(0,30) + '...' : 'Sem Título'}`) : [];
+            const kitOptions = kits && kits.length > 0 ? kits.filter(k => k.SKU).map(k => `${k.SKU} - ${k['Título'] ? k['Título'].substring(0,30) + '...' : 'Sem Título'}`) : [];
+            const freteOptions = fretes && fretes.length > 0 ? fretes.filter(f => f.city).map(f => `${f.city} (CEP: ${f.cepStart} a ${f.cepEnd}) - R$ ${f.price || '0,00'}`) : [];
 
             const crmConfig = [
                 { name: 'protocolo', label: 'Protocolo de Atendimento *', type: 'text', readOnly: true, button: 'Gerar Protocolo Oficial', icon: 'fas fa-fingerprint', full: true, required: true, placeholder: 'Clique no botão para autenticar',
@@ -694,11 +876,15 @@
                 { name: 'canal', label: 'Canal de Origem *', type: 'select', options: ['WhatsApp', 'Chat Online', 'E-mail', 'Ligação Telefônica', 'Reclame Aqui', 'Consumidor.gov', 'Balcão/Loja Física'], required: true, half: true },
                 { name: 'pedido', label: 'Número do Pedido (Marketplace/Site)', type: 'text', half: true, placeholder: 'Ex: PED-12345678' },
                 { name: 'motivo', label: 'Motivo / Assunto', type: 'select', options: ['Dúvida Técnica (Motor/Peças)', 'Cotação de Peças Linha Leve/Diesel', 'Atraso na Entrega', 'Garantia / Defeito / Troca', 'Reclamação de Atendimento', 'Elogio / Sugestão'], half: true },
-                // Integrações Relacionais
-                { name: 'produtoVinculado', label: 'Vincular Produto Cadastrado', type: 'select', options: produtoOptions, half: true },
-                { name: 'kitVinculado', label: 'Vincular Kit Cadastrado', type: 'select', options: kitOptions, half: true },
-                { name: 'regiaoVinculada', label: 'Região / Frete Relacionado', type: 'select', options: freteOptions, half: true },
                 
+                // --- AJUSTE CRM: SELETOR DE PRODUTOS/KITS COM INPUT NUMÉRICO DE QUANTIDADE LADO A LADO ---
+                { name: 'produtoVinculado', label: 'Vincular Produto Cadastrado', type: 'select', options: produtoOptions, threeQuarters: true },
+                { name: 'qtdProduto', label: 'Qtd. Produto', type: 'number', min: '0', placeholder: 'Qtd' }, // fallback para quarter/col-span-1
+                
+                { name: 'kitVinculado', label: 'Vincular Kit Cadastrado', type: 'select', options: kitOptions, threeQuarters: true },
+                { name: 'qtdKit', label: 'Qtd. Kit', type: 'number', min: '0', placeholder: 'Qtd' }, // fallback para quarter/col-span-1
+                
+                { name: 'regiaoVinculada', label: 'Região / Frete Relacionado', type: 'select', options: freteOptions, half: true },
                 { name: 'status', label: 'Status do Atendimento *', type: 'select', options: ['Aberto - Aguardando Resolução', 'Em Andamento', 'Aguardando Cliente', 'Resolvido', 'Cancelado'], required: true, half: true },
                 { name: 'descricao', label: 'Relato do Cliente / Ocorrência', type: 'textarea', full: true, required: true }
             ];
@@ -783,10 +969,13 @@
             const produtosPendentes = (produtos || []).filter(p => p.Status !== 'Ativo' || !p.SKU || !p['Título'] || !p['EAN/GTIN'] || !p['Peso (kg)'] || !p['Comprimento (cm)'] || !p['Largura (cm)'] || !p['Altura (cm)']).length;
             const kitsPendentes = (kits || []).filter(k => k.Status !== 'Ativo' || !k.SKU || !k['Título'] || !k['EAN/GTIN'] || !k['Peso (kg)'] || !k['Comprimento (cm)'] || !k['Largura (cm)'] || !k['Altura (cm)']).length;
             const fretesPendentes = (fretes || []).filter(f => !f.city || !f.cepStart || !f.cepEnd || !f.price).length;
+            
+            // NOVO INDICADOR: TAREFAS PENDENTES (Não conta "Concluída")
+            const tarefasPendentes = (tarefas || []).filter(t => t.status !== 'Concluída').length;
 
             // --- TELAS ---
             const Dashboard = () => {
-                const chamadosAbertos = (atendimentos || []).filter(a => a.status && !['Resolvido', 'Cancelado'].includes(a.status)).length;
+                const chamadosAbertos = atendimentosPendentes;
                 return (
                     <div className="fade-in space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -803,8 +992,8 @@
                                 <div><p className="text-gray-500 dark:text-gray-400 text-sm font-bold">CRM: Pendentes</p><h2 className="text-3xl font-bold dark:text-white">{chamadosAbertos}</h2></div>
                             </div>
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 flex items-center gap-4 border-l-4 border-l-green-500">
-                                <div className="p-4 bg-green-50 dark:bg-slate-700 text-green-500 rounded-lg"><i className="fas fa-truck text-2xl"></i></div>
-                                <div><p className="text-gray-500 dark:text-gray-400 text-sm font-bold">Base de Fretes</p><h2 className="text-3xl font-bold dark:text-white">{(fretes || []).length}</h2></div>
+                                <div className="p-4 bg-green-50 dark:bg-slate-700 text-green-500 rounded-lg"><i className="fas fa-check-square text-2xl"></i></div>
+                                <div><p className="text-gray-500 dark:text-gray-400 text-sm font-bold">Tarefas Abertas</p><h2 className="text-3xl font-bold dark:text-white">{tarefasPendentes}</h2></div>
                             </div>
                         </div>
 
@@ -815,8 +1004,8 @@
                                     <button onClick={() => setActiveMenu('fretes')} className="p-4 border dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-left transition flex flex-col items-center justify-center text-mercantil-blue dark:text-blue-400 font-bold">
                                         <i className="fas fa-truck text-3xl mb-2"></i> Calcular Frete
                                     </button>
-                                    <button onClick={() => setActiveMenu('crm')} className="p-4 border dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-left transition flex flex-col items-center justify-center text-mercantil-orange dark:text-orange-400 font-bold">
-                                        <i className="fas fa-headset text-3xl mb-2"></i> Novo Atendimento
+                                    <button onClick={() => setActiveMenu('tarefas')} className="p-4 border dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-left transition flex flex-col items-center justify-center text-mercantil-orange dark:text-orange-400 font-bold">
+                                        <i className="fas fa-tasks text-3xl mb-2"></i> Ver Tarefas
                                     </button>
                                 </div>
                             </div>
@@ -838,7 +1027,7 @@
 
             const ImportExport = () => {
                 const forceBackupNow = () => {
-                    const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes };
+                    const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas };
                     localStorage.setItem('mrc_auto_backup_dump', JSON.stringify(fullSystemDump));
                     setLastBackup(new Date().toISOString());
                     showToast('Backup manual gravado com sucesso no navegador.', 'success');
@@ -856,7 +1045,6 @@
                     showToast('Download do backup concluído.');
                 };
 
-                // RESTAURAÇÃO DE BACKUP JSON
                 const handleRestoreJSON = (e) => {
                     const file = e.target.files[0];
                     if (!file) return;
@@ -866,8 +1054,7 @@
                         try {
                             const data = JSON.parse(evt.target.result);
                             
-                            // Validação simples do arquivo Mercantil_ERP_Backup
-                            if (data.produtos || data.kits || data.fretes || data.atendimentos) {
+                            if (data.produtos || data.kits || data.fretes || data.atendimentos || data.tarefas) {
                                 if (window.confirm("ATENÇÃO CRÍTICA: Restaurar um backup irá APAGAR E SUBSTITUIR todos os dados atuais do sistema pelo conteúdo deste arquivo. Tem certeza absoluta?")) {
                                     if(data.produtos) setProdutos(data.produtos);
                                     if(data.kits) setKits(data.kits);
@@ -877,6 +1064,7 @@
                                     if(data.gerencia) setGerencia(data.gerencia);
                                     if(data.compliance) setCompliance(data.compliance);
                                     if(data.fretes) setFretes(data.fretes);
+                                    if(data.tarefas) setTarefas(data.tarefas); // Restaura tarefas no backup
                                     
                                     showToast("Sistema restaurado com sucesso! Dados sincronizados.", "success");
                                 }
@@ -954,7 +1142,7 @@
                                 <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Zona de Perigo</h3>
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Esta ação destruirá o banco de dados inteiro deste navegador. Faça o download do backup antes para não perder nada.</p>
                                 <button onClick={() => {
-                                    if(window.confirm('TEM CERTEZA ABSOLUTA? Isso apagará CRM, Peças, Qualidade, TUDO.')) {
+                                    if(window.confirm('TEM CERTEZA ABSOLUTA? Isso apagará CRM, Peças, Qualidade, Tarefas, TUDO.')) {
                                         localStorage.clear(); window.location.reload();
                                     }
                                 }} className="bg-red-600 text-white px-6 py-2 rounded shadow hover:bg-red-800 transition font-bold">Resetar Todo o ERP</button>
@@ -999,6 +1187,9 @@
                         <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scroll">
                             <MenuItem id="dashboard" icon="fas fa-chart-pie" label="Dashboard Geral" />
                             
+                            <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Produtividade</p></div>
+                            <MenuItem id="tarefas" icon="fas fa-check-square" label="Tarefas (Kanban)" badge={tarefasPendentes} />
+
                             <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Comercial</p></div>
                             <MenuItem id="produtos" icon="fas fa-box" label="Peças & Motores" badge={produtosPendentes} />
                             <MenuItem id="kits" icon="fas fa-boxes-stacked" label="Kits Montados" badge={kitsPendentes} />
@@ -1017,14 +1208,15 @@
                             <MenuItem id="dados" icon="fas fa-database" label="Dados & Backup" />
                         </nav>
                         <div className="p-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-center text-xs text-gray-500 font-medium">
-                            Versão 2.6 (Update DB & Integr.)
+                            Versão 3.0 (Kanban & DB Link)
                         </div>
                     </aside>
 
                     <div className="md:hidden fixed top-0 left-0 right-0 bg-white dark:bg-slate-800 border-b dark:border-slate-700 z-40 p-4 flex justify-between items-center shadow-sm">
                         <div className="font-extrabold text-mercantil-blue dark:text-blue-400 text-lg flex items-center gap-2"><i className="fas fa-cogs"></i> MERCANTIL</div>
-                        <select className="bg-gray-100 dark:bg-slate-700 border-none rounded p-2 text-sm font-bold focus:ring-0 outline-none" value={activeMenu} onChange={e => setActiveMenu(e.target.value)}>
+                        <select className="bg-gray-100 dark:bg-slate-700 border-none rounded p-2 text-sm font-bold focus:ring-0 outline-none w-48 text-ellipsis" value={activeMenu} onChange={e => setActiveMenu(e.target.value)}>
                             <option value="dashboard">Dashboard</option>
+                            <option value="tarefas">Tarefas ({tarefasPendentes})</option>
                             <option value="produtos">Peças ({produtosPendentes} falhas)</option>
                             <option value="kits">Kits ({kitsPendentes} falhas)</option>
                             <option value="fretes">Gestão de Fretes ({fretesPendentes} falhas)</option>
@@ -1056,6 +1248,13 @@
                         <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scroll">
                             {activeMenu === 'dashboard' && <Dashboard />}
                             
+                            {activeMenu === 'tarefas' && (
+                                <TarefasManager 
+                                    tarefas={tarefas} setTarefas={setTarefas} showToast={showToast} 
+                                    db={{ produtos, kits, atendimentos, qualidade, fretes, marketing }} 
+                                />
+                            )}
+
                             {activeMenu === 'crm' && (
                                 <BaseManager title="Gestão de Atendimento Integrada (CRM)" icon="fas fa-headset" data={atendimentos} formConfig={crmConfig} showToast={showToast}
                                     onValidate={(data) => { if(!data.protocolo) { showToast('Obrigatório gerar o Protocolo de Atendimento oficial antes de salvar!', 'error'); return false; } return true; }}
