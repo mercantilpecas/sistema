@@ -679,7 +679,6 @@
                         });
                         
                         // CORREÇÃO: Força o ID mesmo se não vier no CSV. 
-                        // Isso resolve os problemas da importação gerar produtos sem ID que duplicavam ao editar.
                         if (!obj.id) obj.id = `CSV-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 5)}`;
                         
                         if(obj.Observações) obj.Observações = obj.Observações.replace(/\\n/g, '\n');
@@ -799,11 +798,23 @@
                 { field: 'EAN/GTIN', header: 'EAN', render: (val) => val ? <span className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-mercantil-blue text-xs" onClick={(e) => { e.stopPropagation(); copyToClipboard(val, showToast); }}><i className="fas fa-barcode mr-1"></i> {String(val).substring(0,10)}...</span> : <span className="text-gray-400 text-xs">Sem EAN</span> }
             ];
 
+            // --- CÁLCULOS DE PENDÊNCIAS (BADGES DO MENU) ---
+            
+            // CRM e Qualidade: Conta apenas se NÃO estiver resolvido ou cancelado/encerrado
+            const atendimentosPendentes = (atendimentos || []).filter(a => a.status && !['Resolvido', 'Cancelado'].includes(a.status)).length;
+            const qualidadePendentes = (qualidade || []).filter(q => !q.status || !['Encerrado com Sucesso'].includes(q.status)).length;
+            
+            // Comercial: Conta apenas se houverem falhas no cadastro (ausência de campos base) ou se status for inativo/rascunho
+            const produtosPendentes = (produtos || []).filter(p => p.Status !== 'Ativo' || !p.SKU || !p['Título'] || !p['EAN/GTIN'] || !p['Peso (kg)'] || !p['Comprimento (cm)'] || !p['Largura (cm)'] || !p['Altura (cm)']).length;
+            const kitsPendentes = (kits || []).filter(k => k.Status !== 'Ativo' || !k.SKU || !k['Título'] || !k['EAN/GTIN'] || !k['Peso (kg)'] || !k['Comprimento (cm)'] || !k['Largura (cm)'] || !k['Altura (cm)']).length;
+            const fretesPendentes = (fretes || []).filter(f => !f.city || !f.cepStart || !f.cepEnd || !f.price).length;
+
+
             // --- TELAS ---
             const Dashboard = () => {
                 const prodAtivos = (produtos || []).filter(p => p.Status === 'Ativo').length;
                 const kitsAtivos = (kits || []).filter(k => k.Status === 'Ativo').length;
-                const chamadosAbertos = (atendimentos || []).filter(a => a.status && a.status.includes('Aberto')).length;
+                const chamadosAbertos = (atendimentos || []).filter(a => a.status && !['Resolvido', 'Cancelado'].includes(a.status)).length;
                 
                 return (
                     <div className="fade-in space-y-6">
@@ -975,13 +986,13 @@
                             <MenuItem id="dashboard" icon="fas fa-chart-pie" label="Dashboard Geral" />
                             
                             <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Comercial</p></div>
-                            <MenuItem id="produtos" icon="fas fa-box" label="Peças & Motores" badge={(produtos || []).length} />
-                            <MenuItem id="kits" icon="fas fa-boxes-stacked" label="Kits Montados" badge={(kits || []).length} />
-                            <MenuItem id="fretes" icon="fas fa-truck" label="Gestão de Fretes" badge={(fretes || []).length} />
+                            <MenuItem id="produtos" icon="fas fa-box" label="Peças & Motores" badge={produtosPendentes} />
+                            <MenuItem id="kits" icon="fas fa-boxes-stacked" label="Kits Montados" badge={kitsPendentes} />
+                            <MenuItem id="fretes" icon="fas fa-truck" label="Gestão de Fretes" badge={fretesPendentes} />
                             
                             <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Atendimento & Qualidade</p></div>
-                            <MenuItem id="crm" icon="fas fa-headset" label="CRM Integrado" badge={(atendimentos || []).length} />
-                            <MenuItem id="qualidade" icon="fas fa-medal" label="Qualidade & NCs" />
+                            <MenuItem id="crm" icon="fas fa-headset" label="CRM Integrado" badge={atendimentosPendentes} />
+                            <MenuItem id="qualidade" icon="fas fa-medal" label="Qualidade & NCs" badge={qualidadePendentes} />
                             
                             <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Administração</p></div>
                             <MenuItem id="marketing" icon="fas fa-bullhorn" label="Marketing" />
@@ -992,7 +1003,7 @@
                             <MenuItem id="dados" icon="fas fa-database" label="Dados & Backup" />
                         </nav>
                         <div className="p-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-center text-xs text-gray-500 font-medium">
-                            Versão 2.4 (+ Correções ID e Fretes)
+                            Versão 2.5 (Ajuste de Badges de Pendência)
                         </div>
                     </aside>
 
@@ -1001,11 +1012,11 @@
                         <div className="font-extrabold text-mercantil-blue dark:text-blue-400 text-lg flex items-center gap-2"><i className="fas fa-cogs"></i> MERCANTIL</div>
                         <select className="bg-gray-100 dark:bg-slate-700 border-none rounded p-2 text-sm font-bold focus:ring-0 outline-none" value={activeMenu} onChange={e => setActiveMenu(e.target.value)}>
                             <option value="dashboard">Dashboard</option>
-                            <option value="produtos">Peças</option>
-                            <option value="kits">Kits</option>
-                            <option value="fretes">Gestão de Fretes</option>
-                            <option value="crm">CRM Atendimento</option>
-                            <option value="qualidade">Qualidade</option>
+                            <option value="produtos">Peças ({produtosPendentes} falhas)</option>
+                            <option value="kits">Kits ({kitsPendentes} falhas)</option>
+                            <option value="fretes">Gestão de Fretes ({fretesPendentes} falhas)</option>
+                            <option value="crm">CRM Atendimento ({atendimentosPendentes} abertos)</option>
+                            <option value="qualidade">Qualidade ({qualidadePendentes} pendentes)</option>
                             <option value="marketing">Marketing</option>
                             <option value="gerencia">Gerência</option>
                             <option value="compliance">Compliance</option>
