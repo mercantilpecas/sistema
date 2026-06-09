@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mercantil ERP - Gestão Integrada</title>
+    <title>Mercantil ERP - Gestão Integrada (Cloud)</title>
     
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
@@ -36,6 +36,9 @@
     
     <!-- Biblioteca SheetJS (XLSX) para importação/exportação de planilhas e CSVs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <!-- SDK do Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
         body { background-color: inherit; }
@@ -74,54 +77,130 @@
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Inter', sans-serif; color: #475569;">
             <i class="fas fa-circle-notch fa-spin" style="font-size: 3rem; color: #1E3A8A; margin-bottom: 20px;"></i>
             <h2 style="margin: 0; font-size: 1.5rem; font-weight: 700;">Iniciando Mercantil ERP...</h2>
-            <p style="margin-top: 10px; font-size: 0.9rem;">Carregando módulos de sistema e banco de dados local.</p>
+            <p style="margin-top: 10px; font-size: 0.9rem;">Sincronizando módulos de sistema e banco de dados em nuvem.</p>
         </div>
     </div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // --- HOOK CUSTOMIZADO PARA LOCALSTORAGE ---
-        const useLocalStorage = (key, initialValue) => {
-            const [storedValue, setStoredValue] = useState(() => {
-                try {
-                    const item = window.localStorage.getItem(key);
-                    if (!item || item === 'null' || item === 'undefined') return initialValue;
-                    const parsed = JSON.parse(item);
-                    
-                    if (Array.isArray(parsed)) {
-                        let isCorrupted = false;
-                        parsed.forEach((obj, idx) => {
-                            if (obj && typeof obj === 'object' && !obj.id) {
-                                obj.id = `FIX-${Date.now()}-${Math.random().toString(36).substr(2, 5)}-${idx}`;
-                                isCorrupted = true;
-                            }
-                        });
-                        if (isCorrupted) window.localStorage.setItem(key, JSON.stringify(parsed));
-                    }
+        // --- INICIALIZAÇÃO DO SUPABASE ---
+        const supabaseUrl = 'https://binjojpmcobdwdfofwtq.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJpbmpvanBtY29iZHdkZm9md3RxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTg5MzcsImV4cCI6MjA5NjU5NDkzN30.-GvQXCJqGZ9uyf2nmc84mnPImUuhmKYDbZaRGLGhcww';
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-                    if (Array.isArray(initialValue) && !Array.isArray(parsed)) {
-                        return initialValue;
-                    }
-                    
-                    return parsed !== null ? parsed : initialValue;
-                } catch (error) {
-                    console.error("Erro ao ler LocalStorage", error);
-                    return initialValue;
+        // --- HOOK CUSTOMIZADO PARA SUPABASE (COM FALLBACK PARA CONFIGURAÇÕES LOCAIS) ---
+        function useLocalStorage(key, initialValue) {
+            // Identifica se a chave deve ficar apenas no local storage (como preferências de UI ou log do backup)
+            const isLocalOnly = key === 'mrc_theme_dark' || key === 'mrc_last_backup_time';
+            const tipo = key.replace('mrc_', ''); 
+
+            const [storedValue, setStoredValue] = useState(() => {
+                if (isLocalOnly) {
+                    try {
+                        const item = window.localStorage.getItem(key);
+                        if (!item || item === 'null' || item === 'undefined') return initialValue;
+                        return JSON.parse(item);
+                    } catch (error) { return initialValue; }
                 }
+                return initialValue;
             });
 
-            const setValue = (value) => {
+            useEffect(() => {
+                if (isLocalOnly) return;
+                
+                let isMounted = true;
+                
+                // 1. Busca inicial de dados na nuvem
+                const fetchFromSupabase = async () => {
+                    const { data, error } = await supabase
+                        .from('data')
+                        .select('dados')
+                        .eq('tipo', tipo);
+                    
+                    if (!error && data && isMounted) {
+                        setStoredValue(data.map(item => item.dados));
+                    }
+                };
+                fetchFromSupabase();
+
+                // 2. Tempo Real: Atualiza a tela se alguém alterar o banco de dados
+                const channel = supabase.channel(`public:data:tipo=eq.${tipo}`)
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'data', filter: `tipo=eq.${tipo}` }, payload => {
+                        fetchFromSupabase();
+                    })
+                    .subscribe();
+
+                return () => {
+                    isMounted = false;
+                    supabase.removeChannel(channel);
+                };
+            }, [tipo, isLocalOnly]);
+
+            // 3. Salva de forma inteligente na Nuvem
+            const setValue = async (value) => {
                 try {
                     const valueToStore = value instanceof Function ? value(storedValue) : value;
-                    setStoredValue(valueToStore);
-                    window.localStorage.setItem(key, JSON.stringify(valueToStore));
+                    
+                    // Tratamento para variaveis estritamente locais
+                    if (isLocalOnly) {
+                        setStoredValue(valueToStore);
+                        window.localStorage.setItem(key, JSON.stringify(valueToStore));
+                        return;
+                    }
+
+                    // Prevenção de segurança: Garantir que tudo a ser salvo possui um ID válido
+                    let sanitizedValue = valueToStore;
+                    if (Array.isArray(valueToStore)) {
+                        sanitizedValue = valueToStore.map((item, idx) => {
+                            if (item && typeof item === 'object' && !item.id && !item.ID) {
+                                return { ...item, id: `FIX-${Date.now()}-${Math.random().toString(36).substr(2, 5)}-${idx}` };
+                            }
+                            return item;
+                        });
+                    }
+
+                    const oldValue = Array.isArray(storedValue) ? storedValue : [];
+                    
+                    // Atualiza a tela imediatamente (Optimistic UI - Sem travamentos)
+                    setStoredValue(sanitizedValue);
+
+                    if (!Array.isArray(sanitizedValue)) return;
+
+                    // Descobre o que foi deletado comparando os arrays
+                    const newIds = new Set(sanitizedValue.map(v => String(v.id || v.ID)));
+                    const deletedItems = oldValue.filter(v => !newIds.has(String(v.id || v.ID)));
+
+                    // Descobre o que foi adicionado ou atualizado comparando os objetos
+                    const oldMap = new Map(oldValue.map(v => [String(v.id || v.ID), JSON.stringify(v)]));
+                    const upsertData = [];
+                    
+                    for (let item of sanitizedValue) {
+                        const id = String(item.id || item.ID);
+                        const strItem = JSON.stringify(item);
+                        
+                        if (oldMap.get(id) !== strItem) {
+                            upsertData.push({ id, tipo, dados: item });
+                        }
+                    }
+
+                    // Envia para o Supabase apenas o que mudou
+                    if (upsertData.length > 0) {
+                        await supabase.from('data').upsert(upsertData);
+                    }
+                    
+                    for (let item of deletedItems) {
+                        const id = String(item.id || item.ID);
+                        await supabase.from('data').delete().eq('id', id).eq('tipo', tipo);
+                    }
+
                 } catch (error) {
-                    console.error("Erro ao salvar no localStorage", error);
+                    console.error("Erro de sincronização com Supabase:", error);
                 }
             };
+
             return [storedValue, setValue];
-        };
+        }
 
         // --- UTILS ---
         const copyToClipboard = (text, showToast) => {
@@ -467,7 +546,6 @@
 
             const TaskCard = ({ task }) => {
                 const priorityColors = { 'Alta': 'border-l-red-500', 'Média': 'border-l-yellow-500', 'Baixa': 'border-l-blue-500' };
-                // Correção no bg-slate-750 (inválido) para bg-slate-700
                 const bgColors = { 'Pendente': 'bg-white dark:bg-slate-800', 'Em Andamento': 'bg-blue-50 dark:bg-slate-700', 'Concluída': 'bg-gray-100 dark:bg-slate-900 opacity-60' };
                 
                 let displayVinculos = task.vinculos || [];
@@ -1032,8 +1110,8 @@
             };
 
             const addRow = () => {
-                const newId = data.length > 0 ? Math.max(...data.map(d => d.id || 0)) + 1 : 1;
-                onSaveData([{ id: newId, city: '', cepStart: '', cepEnd: '', weightMin: '', weightMax: '', price: '' }, ...data]);
+                const newId = data.length > 0 ? Math.max(...data.map(d => Number(d.id) || 0)) + 1 : 1;
+                onSaveData([{ id: String(newId), city: '', cepStart: '', cepEnd: '', weightMin: '', weightMax: '', price: '' }, ...data]);
                 showToast('Nova linha adicionada no topo.');
             };
 
@@ -1070,7 +1148,7 @@
                             if (!row || row.length === 0 || !row[0]) continue;
                             
                             newData.push({
-                                id: Date.now() + i,
+                                id: `FRT-${Date.now()}-${i}`,
                                 city: String(row[0] || '').trim(),
                                 cepStart: String(row[1] || '').trim(),
                                 cepEnd: String(row[2] || '').trim(),
@@ -1514,9 +1592,9 @@
                                 <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4 border-b dark:border-slate-700 pb-2"><i className="fas fa-shield-alt text-mercantil-blue mr-2"></i>Status do Sistema</h3>
                                 <ul className="space-y-3 text-sm dark:text-slate-300">
                                     <li className="flex justify-between items-center"><span>Modo Noturno (Dark)</span><span className="font-bold">{darkMode ? 'Ativado' : 'Desativado'}</span></li>
-                                    <li className="flex justify-between items-center"><span>Status do Banco Local</span><span className="text-green-600 dark:text-green-400 font-bold"><i className="fas fa-check"></i> Seguro e Operante</span></li>
+                                    <li className="flex justify-between items-center"><span>Status do Banco de Dados (Supabase)</span><span className="text-green-600 dark:text-green-400 font-bold"><i className="fas fa-cloud text-mercantil-blue dark:text-blue-400 mr-1"></i> Conectado (Nuvem)</span></li>
                                     <li className="flex justify-between items-center p-2 bg-gray-50 dark:bg-slate-900 rounded border dark:border-slate-700 mt-2">
-                                        <span className="text-mercantil-orange font-bold"><i className="fas fa-cloud-upload-alt mr-2"></i>Último Backup 100%:</span>
+                                        <span className="text-mercantil-orange font-bold"><i className="fas fa-file-download mr-2"></i>Último Backup Local (JSON):</span>
                                         <span className="font-mono text-xs">{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nenhum backup gerado'}</span>
                                     </li>
                                 </ul>
@@ -1556,7 +1634,7 @@
                             const data = JSON.parse(evt.target.result);
                             
                             if (data.produtos || data.kits || data.fretes || data.atendimentos || data.tarefas || data.notas) {
-                                if (window.confirm("ATENÇÃO CRÍTICA: Restaurar um backup irá APAGAR E SUBSTITUIR todos os dados atuais do sistema pelo conteúdo deste arquivo. Tem certeza absoluta?")) {
+                                if (window.confirm("ATENÇÃO CRÍTICA: Restaurar um backup irá APAGAR E SUBSTITUIR todos os dados da NUVEM e LOCAL pelo conteúdo deste arquivo. Tem certeza absoluta?")) {
                                     if(data.produtos) setProdutos(data.produtos);
                                     if(data.kits) setKits(data.kits);
                                     if(data.atendimentos) setAtendimentos(data.atendimentos);
@@ -1568,7 +1646,7 @@
                                     if(data.tarefas) setTarefas(data.tarefas);
                                     if(data.notas) setNotas(data.notas);
                                     
-                                    showToast("Sistema restaurado com sucesso! Dados sincronizados.", "success");
+                                    showToast("Sistema restaurado com sucesso! Dados sincronizando para a nuvem...", "success");
                                 }
                             } else {
                                 showToast("Arquivo JSON não reconhecido pelo sistema Mercantil ERP.", "error");
@@ -1618,7 +1696,7 @@
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700">
                                 <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2"><i className="fas fa-shield-check text-green-500 mr-2"></i>Gerenciar Backups</h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">O sistema salva os dados automaticamente a cada 30 minutos. Exporte o arquivo JSON para segurança extrema.</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">A nuvem salva automaticamente, mas você pode exportar um arquivo de segurança do estado atual do sistema (JSON).</p>
                                 
                                 <div className="p-4 bg-gray-50 dark:bg-slate-900 border dark:border-slate-700 rounded-lg mb-6 flex flex-col gap-2">
                                     <div className="text-sm dark:text-slate-300"><strong>Último Backup Automático:</strong></div>
@@ -1626,13 +1704,13 @@
                                 </div>
 
                                 <div className="flex gap-3 mb-4">
-                                    <button onClick={forceBackupNow} className="flex-1 bg-mercantil-dark text-white p-3 rounded-lg hover:bg-black font-bold shadow transition"><i className="fas fa-save mr-2"></i> Forçar Backup</button>
+                                    <button onClick={forceBackupNow} className="flex-1 bg-mercantil-dark text-white p-3 rounded-lg hover:bg-black font-bold shadow transition"><i className="fas fa-save mr-2"></i> Gerar JSON Base</button>
                                     <button onClick={downloadBackup} className="flex-1 bg-green-600 text-white p-3 rounded-lg hover:bg-green-800 font-bold shadow transition"><i className="fas fa-file-download mr-2"></i> Baixar JSON Base</button>
                                 </div>
 
                                 <div className="border-t dark:border-slate-700 pt-4 mt-2">
                                     <label className="flex items-center justify-center gap-2 w-full p-3 bg-blue-50 dark:bg-slate-700 text-mercantil-blue dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-slate-600 cursor-pointer transition font-bold shadow-sm">
-                                        <i className="fas fa-cloud-upload-alt text-lg"></i> Restaurar Backup (.json)
+                                        <i className="fas fa-cloud-upload-alt text-lg"></i> Restaurar JSON na Nuvem
                                         <input type="file" accept=".json" className="hidden" onChange={handleRestoreJSON} />
                                     </label>
                                     <p className="text-xs text-center text-gray-500 mt-2">Irá sobrescrever a base inteira com o arquivo escolhido.</p>
@@ -1642,10 +1720,13 @@
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
                                 <div className="w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-4xl mb-4"><i className="fas fa-exclamation-triangle"></i></div>
                                 <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Zona de Perigo</h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Esta ação destruirá o banco de dados inteiro deste navegador. Faça o download do backup antes para não perder nada.</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Esta ação destruirá o banco de dados inteiro da nuvem (Supabase) e dados locais. Faça o download do backup antes para não perder nada.</p>
                                 <button onClick={() => {
-                                    if(window.confirm('TEM CERTEZA ABSOLUTA? Isso apagará CRM, Peças, Qualidade, Tarefas, TUDO.')) {
-                                        localStorage.clear(); window.location.reload();
+                                    if(window.confirm('TEM CERTEZA ABSOLUTA? Isso apagará CRM, Peças, Qualidade, Tarefas, TUDO na nuvem e local.')) {
+                                        localStorage.clear(); 
+                                        supabase.from('data').delete().neq('id', '0').then(() => {
+                                            window.location.reload();
+                                        });
                                     }
                                 }} className="bg-red-600 text-white px-6 py-2 rounded shadow hover:bg-red-800 transition font-bold">Resetar Todo o ERP</button>
                             </div>
@@ -1720,7 +1801,7 @@
                             <MenuItem id="dados" icon="fas fa-database" label="Dados & Backup" />
                         </nav>
                         <div className="p-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-center text-xs text-gray-500 font-medium">
-                            Versão 3.2 (Kanban+ Notas Integradas)
+                            Versão 4.0 (Cloud Supabase)
                         </div>
                     </aside>
 
