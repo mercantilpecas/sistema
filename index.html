@@ -91,7 +91,6 @@
 
         // --- HOOK CUSTOMIZADO PARA SUPABASE (COM FALLBACK PARA CONFIGURAÇÕES LOCAIS) ---
         function useLocalStorage(key, initialValue) {
-            // Identifica se a chave deve ficar apenas no local storage (como preferências de UI ou log do backup)
             const isLocalOnly = key === 'mrc_theme_dark' || key === 'mrc_last_backup_time';
             const tipo = key.replace('mrc_', ''); 
 
@@ -111,7 +110,6 @@
                 
                 let isMounted = true;
                 
-                // 1. Busca inicial de dados na nuvem
                 const fetchFromSupabase = async () => {
                     const { data, error } = await supabase
                         .from('data')
@@ -124,7 +122,6 @@
                 };
                 fetchFromSupabase();
 
-                // 2. Tempo Real: Atualiza a tela se alguém alterar o banco de dados
                 const channel = supabase.channel(`public:data:tipo=eq.${tipo}`)
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'data', filter: `tipo=eq.${tipo}` }, payload => {
                         fetchFromSupabase();
@@ -137,19 +134,16 @@
                 };
             }, [tipo, isLocalOnly]);
 
-            // 3. Salva de forma inteligente na Nuvem
             const setValue = async (value) => {
                 try {
                     const valueToStore = value instanceof Function ? value(storedValue) : value;
                     
-                    // Tratamento para variaveis estritamente locais
                     if (isLocalOnly) {
                         setStoredValue(valueToStore);
                         window.localStorage.setItem(key, JSON.stringify(valueToStore));
                         return;
                     }
 
-                    // Prevenção de segurança: Garantir que tudo a ser salvo possui um ID válido
                     let sanitizedValue = valueToStore;
                     if (Array.isArray(valueToStore)) {
                         sanitizedValue = valueToStore.map((item, idx) => {
@@ -161,17 +155,13 @@
                     }
 
                     const oldValue = Array.isArray(storedValue) ? storedValue : [];
-                    
-                    // Atualiza a tela imediatamente (Optimistic UI - Sem travamentos)
                     setStoredValue(sanitizedValue);
 
                     if (!Array.isArray(sanitizedValue)) return;
 
-                    // Descobre o que foi deletado comparando os arrays
                     const newIds = new Set(sanitizedValue.map(v => String(v.id || v.ID)));
                     const deletedItems = oldValue.filter(v => !newIds.has(String(v.id || v.ID)));
 
-                    // Descobre o que foi adicionado ou atualizado comparando os objetos
                     const oldMap = new Map(oldValue.map(v => [String(v.id || v.ID), JSON.stringify(v)]));
                     const upsertData = [];
                     
@@ -184,7 +174,6 @@
                         }
                     }
 
-                    // Envia para o Supabase apenas o que mudou
                     if (upsertData.length > 0) {
                         await supabase.from('data').upsert(upsertData);
                     }
@@ -266,7 +255,7 @@
             };
 
             return (
-                <div className="border border-gray-300 dark:border-slate-600 rounded-lg overflow-hidden flex flex-col bg-white dark:bg-slate-900 focus-within:ring-2 focus-within:ring-mercantil-blue transition-all">
+                <div className="border border-gray-300 dark:border-slate-600 rounded-lg overflow-hidden flex flex-col bg-white dark:bg-slate-900 focus-within:ring-2 focus-within:ring-mercantil-light transition-all">
                     <div className="bg-gray-100 dark:bg-slate-800 border-b border-gray-300 dark:border-slate-600 p-2 flex gap-1 flex-wrap items-center">
                         <button type="button" onClick={() => execCmd('bold')} className="p-1.5 px-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition"><i className="fas fa-bold"></i></button>
                         <button type="button" onClick={() => execCmd('italic')} className="p-1.5 px-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition"><i className="fas fa-italic"></i></button>
@@ -293,7 +282,7 @@
             );
         };
 
-        // --- COMPONENTE: MÚLTIPLOS VÍNCULOS COMERCIAIS (PRODUTOS/KITS CRM) ---
+        // --- COMPONENTE: VÍNCULOS COMERCIAIS (Apenas Produtos e Kits) ---
         const ItensVinculadosManager = ({ value = [], onChange, produtosOptions = [], kitsOptions = [] }) => {
             const [tipo, setTipo] = useState('Produto');
             const [selecionado, setSelecionado] = useState('');
@@ -319,7 +308,7 @@
                     <div className="flex flex-wrap gap-2 mb-3">
                         {(Array.isArray(value) ? value : []).map((v, i) => (
                             <span key={i} className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md text-xs font-bold text-gray-700 dark:text-gray-200 shadow-sm transition">
-                                <span className={v.tipo === 'Produto' ? 'text-mercantil-blue dark:text-blue-400' : 'text-mercantil-orange dark:text-orange-400'}>
+                                <span className={v.tipo === 'Produto' ? 'text-mercantil-light dark:text-blue-400' : 'text-mercantil-orange dark:text-orange-400'}>
                                     <i className={v.tipo === 'Produto' ? 'fas fa-box mr-1' : 'fas fa-boxes-stacked mr-1'}></i>{v.tipo}:
                                 </span>
                                 <span className="truncate max-w-[250px]" title={v.item}>{v.item}</span>
@@ -335,24 +324,112 @@
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50 dark:bg-slate-900 p-3 rounded-lg border border-gray-200 dark:border-slate-700">
                         <div className="md:col-span-3">
                             <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Tipo de Item</label>
-                            <select value={tipo} onChange={e => {setTipo(e.target.value); setSelecionado('');}} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm">
+                            <select value={tipo} onChange={e => {setTipo(e.target.value); setSelecionado('');}} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-light outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm">
                                 <option value="Produto">Produto / Peça</option>
                                 <option value="Kit">Kit Montado</option>
                             </select>
                         </div>
                         <div className="md:col-span-6">
                             <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Selecione o {tipo}</label>
-                            <select value={selecionado} onChange={e => setSelecionado(e.target.value)} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm">
+                            <select value={selecionado} onChange={e => setSelecionado(e.target.value)} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-light outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm">
                                 <option value="">Selecione na lista...</option>
                                 {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                             </select>
                         </div>
                         <div className="md:col-span-2">
                             <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Quantidade</label>
-                            <input type="number" min="1" value={qtd} onChange={e => setQtd(parseInt(e.target.value)||1)} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm" />
+                            <input type="number" min="1" value={qtd} onChange={e => setQtd(parseInt(e.target.value)||1)} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-light outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm" />
                         </div>
                         <div className="md:col-span-1">
                             <button type="button" onClick={handleAdd} disabled={!selecionado} className="w-full bg-mercantil-blue text-white p-2 rounded hover:bg-blue-800 disabled:bg-gray-400 disabled:dark:bg-slate-700 flex items-center justify-center transition shadow-sm h-[38px]" title="Adicionar à lista">
+                                <i className="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- FUNÇÃO AUXILIAR GLOBAL PARA VÍNCULOS ---
+        const getGlobalLinkOptions = (tipo, db) => {
+            switch(tipo) {
+                case 'Produtos': return (db.produtos||[]).filter(p=>p.SKU).map(p => ({ id: p.SKU, label: `${p.SKU} - ${p['Título']?.substring(0,30)}` }));
+                case 'Kits': return (db.kits||[]).filter(k=>k.SKU).map(k => ({ id: k.SKU, label: `${k.SKU} - ${k['Título']?.substring(0,30)}` }));
+                case 'CRM (Atendimentos)': return (db.atendimentos||[]).filter(a=>a.protocolo).map(a => ({ id: a.protocolo, label: `${a.protocolo} - ${a.cliente}` }));
+                case 'Devoluções': return (db.devolucoes||[]).filter(d=>d.protocolo).map(d => ({ id: d.protocolo, label: `${d.protocolo} - ${d.cliente}` }));
+                case 'Qualidade': return (db.qualidade||[]).filter(q=>q.data).map(q => ({ id: q.id, label: `NC: ${q.data} - ${q.tipo}` }));
+                case 'Marketing': return (db.marketing||[]).filter(m=>m.data).map(m => ({ id: m.id, label: `Pauta: ${m.data} - ${m.plataforma}` }));
+                case 'Fretes': return (db.fretes||[]).filter(f=>f.city).map(f => ({ id: f.id, label: `Frete: ${f.city} (${f.cepStart})` }));
+                case 'Tarefas': return (db.tarefas||[]).filter(t=>t.titulo).map(t => ({ id: t.id, label: `Tarefa: ${t.titulo?.substring(0,30)}` }));
+                case 'Notas': return (db.notas||[]).filter(n=>n.titulo).map(n => ({ id: n.id, label: `Nota: ${n.titulo?.substring(0,30)}` }));
+                default: return [];
+            }
+        };
+
+        // --- COMPONENTE: VÍNCULOS GLOBAIS (Qualquer Área do Sistema) ---
+        const VinculosGlobaisManager = ({ value = [], onChange, db }) => {
+            const [tipo, setTipo] = useState('');
+            const [selecionado, setSelecionado] = useState('');
+
+            const handleAdd = () => {
+                if (!tipo || !selecionado) return;
+                const option = getGlobalLinkOptions(tipo, db).find(o => o.id === selecionado);
+                if (option) {
+                    const currentVals = Array.isArray(value) ? value : [];
+                    if (!currentVals.some(v => v.tipo === tipo && v.id === selecionado)) {
+                        onChange([...currentVals, { tipo, id: selecionado, label: option.label }]);
+                    }
+                }
+                setSelecionado('');
+            };
+
+            const handleRemove = (idx) => {
+                const currentVals = Array.isArray(value) ? value : [];
+                onChange(currentVals.filter((_, i) => i !== idx));
+            };
+
+            return (
+                <div className="border border-gray-200 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-slate-800 shadow-sm mt-1 w-full">
+                    <div className="flex flex-wrap gap-2 mb-3">
+                        {(Array.isArray(value) ? value : []).map((v, i) => (
+                            <span key={i} className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md text-xs font-bold text-gray-700 dark:text-gray-200 shadow-sm transition">
+                                <span className="text-mercantil-light dark:text-blue-400">
+                                    <i className="fas fa-link mr-1"></i>{v.tipo}:
+                                </span>
+                                <span className="truncate max-w-[250px]" title={v.label || v.id}>{v.label || v.id}</span>
+                                <button type="button" onClick={() => handleRemove(i)} className="text-red-500 hover:text-red-700 transition ml-1"><i className="fas fa-times-circle"></i></button>
+                            </span>
+                        ))}
+                        {(Array.isArray(value) ? value : []).length === 0 && (
+                            <span className="text-xs text-gray-400 dark:text-gray-500 italic">Nenhum vínculo adicionado até o momento.</span>
+                        )}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50 dark:bg-slate-900 p-3 rounded-lg border border-gray-200 dark:border-slate-700">
+                        <div className="md:col-span-4">
+                            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Área / Módulo</label>
+                            <select value={tipo} onChange={e => {setTipo(e.target.value); setSelecionado('');}} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-light outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm">
+                                <option value="">Selecione a área...</option>
+                                <option value="Produtos">Produtos / Peças</option>
+                                <option value="Kits">Kits</option>
+                                <option value="CRM (Atendimentos)">CRM (Atendimentos)</option>
+                                <option value="Devoluções">Devoluções</option>
+                                <option value="Qualidade">Qualidade (NCs)</option>
+                                <option value="Tarefas">Tarefas</option>
+                                <option value="Notas">Bloco de Notas</option>
+                                <option value="Marketing">Marketing</option>
+                                <option value="Fretes">Fretes</option>
+                            </select>
+                        </div>
+                        <div className="md:col-span-6">
+                            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Selecione o Registro</label>
+                            <select value={selecionado} onChange={e => setSelecionado(e.target.value)} disabled={!tipo} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-light outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm disabled:bg-gray-200 disabled:dark:bg-slate-700">
+                                <option value="">{tipo ? 'Selecione na lista...' : 'Escolha a área primeiro'}</option>
+                                {tipo && getGlobalLinkOptions(tipo, db).map((opt, i) => <option key={i} value={opt.id}>{opt.label}</option>)}
+                            </select>
+                        </div>
+                        <div className="md:col-span-2">
+                            <button type="button" onClick={handleAdd} disabled={!selecionado} className="w-full bg-mercantil-blue text-white p-2 rounded hover:bg-blue-800 disabled:bg-gray-400 disabled:dark:bg-slate-700 flex items-center justify-center transition shadow-sm h-[38px]" title="Vincular">
                                 <i className="fas fa-plus"></i>
                             </button>
                         </div>
@@ -373,11 +450,11 @@
                         {children}
                     </div>
                     {(onSave || extraButtons) && (
-                        <div className="p-5 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex justify-between items-center">
-                            <div>{extraButtons}</div>
-                            <div className="flex gap-3">
-                                <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-lg hover:bg-gray-300 dark:hover:bg-slate-600 font-medium transition">Cancelar</button>
-                                {onSave && <button onClick={onSave} className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 font-medium shadow-md transition">Salvar Alterações</button>}
+                        <div className="p-5 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="w-full sm:w-auto flex justify-center">{extraButtons}</div>
+                            <div className="flex flex-col-reverse sm:flex-row gap-3 w-full sm:w-auto">
+                                <button onClick={onClose} className="w-full sm:w-auto px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 font-medium transition text-center">Cancelar</button>
+                                {onSave && <button onClick={onSave} className="w-full sm:w-auto px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 font-medium shadow-md transition text-center">Salvar Alterações</button>}
                             </div>
                         </div>
                     )}
@@ -385,7 +462,7 @@
             </div>
         );
 
-        const AutoForm = ({ config, initialData, onSave, onCancel }) => {
+        const AutoForm = ({ config, initialData, onSave, onCancel, db }) => {
             const [data, setData] = useState(initialData || {});
             return (
                 <form onSubmit={e => { e.preventDefault(); onSave(data); }} className="space-y-4">
@@ -406,20 +483,26 @@
                                             produtosOptions={f.produtos} 
                                             kitsOptions={f.kits} 
                                         />
+                                    ) : f.type === 'vinculos_globais' ? (
+                                        <VinculosGlobaisManager 
+                                            value={data[f.name]} 
+                                            onChange={v => setData({...data, [f.name]: v})} 
+                                            db={db}
+                                        />
                                     ) : (
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-2 w-full">
                                             {f.type === 'select' ? (
-                                                <select required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})}>
+                                                <select required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-mercantil-light outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})}>
                                                     <option value="">Selecione...</option>
                                                     {f.options && f.options.map((o, idx) => <option key={idx} value={o}>{o}</option>)}
                                                 </select>
                                             ) : f.type === 'textarea' ? (
-                                                <textarea required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} rows="3" placeholder={f.placeholder || ''} />
+                                                <textarea required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-mercantil-light outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} rows="3" placeholder={f.placeholder || ''} />
                                             ) : (
-                                                <input required={f.required} type={f.type||'text'} min={f.min} step={f.step} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} readOnly={f.readOnly} placeholder={f.placeholder || ''} />
+                                                <input required={f.required} type={f.type||'text'} min={f.min} step={f.step} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-mercantil-light outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} readOnly={f.readOnly} placeholder={f.placeholder || ''} />
                                             )}
                                             {f.button && (
-                                                <button type="button" onClick={() => f.action(setData)} className="bg-mercantil-blue text-white px-4 py-2 rounded shadow hover:bg-blue-800 whitespace-nowrap text-sm font-bold flex items-center transition">
+                                                <button type="button" onClick={() => f.action(setData)} className="w-full sm:w-auto bg-mercantil-blue text-white px-4 py-2 rounded shadow hover:bg-blue-800 whitespace-nowrap text-sm font-bold flex items-center justify-center transition">
                                                     <i className={`${f.icon || "fas fa-bolt"} mr-2`}></i> {f.button}
                                                 </button>
                                             )}
@@ -429,25 +512,12 @@
                             );
                         })}
                     </div>
-                    <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700">
-                        <button type="button" onClick={onCancel} className="px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium">Cancelar</button>
-                        <button type="submit" className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex items-center transition"><i className="fas fa-save mr-2"></i> Salvar Registro</button>
+                    <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700 w-full">
+                        <button type="button" onClick={onCancel} className="w-full sm:w-auto px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium text-center">Cancelar</button>
+                        <button type="submit" className="w-full sm:w-auto px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex justify-center items-center transition text-center"><i className="fas fa-save mr-2"></i> Salvar Registro</button>
                     </div>
                 </form>
             );
-        };
-
-        // --- FUNÇÃO AUXILIAR GLOBAL PARA VÍNCULOS ---
-        const getGlobalLinkOptions = (tipo, db) => {
-            switch(tipo) {
-                case 'Produtos': return db.produtos.filter(p=>p.SKU).map(p => ({ id: p.SKU, label: `${p.SKU} - ${p['Título']?.substring(0,30)}` }));
-                case 'Kits': return db.kits.filter(k=>k.SKU).map(k => ({ id: k.SKU, label: `${k.SKU} - ${k['Título']?.substring(0,30)}` }));
-                case 'CRM (Atendimentos)': return db.atendimentos.filter(a=>a.protocolo).map(a => ({ id: a.protocolo, label: `${a.protocolo} - ${a.cliente}` }));
-                case 'Qualidade': return db.qualidade.filter(q=>q.data).map(q => ({ id: q.id, label: `NC: ${q.data} - ${q.tipo}` }));
-                case 'Marketing': return db.marketing.filter(m=>m.data).map(m => ({ id: m.id, label: `Pauta: ${m.data} - ${m.plataforma}` }));
-                case 'Fretes': return db.fretes.filter(f=>f.city).map(f => ({ id: f.id, label: `Frete: ${f.city} (${f.cepStart})` }));
-                default: return [];
-            }
         };
 
         // --- COMPONENTE GESTÃO DE TAREFAS (KANBAN) ---
@@ -586,10 +656,10 @@
                             </div>
                         )}
 
-                        <div className="flex items-center gap-2 mt-auto" onClick={e => e.stopPropagation()}>
-                            {task.status !== 'Pendente' && <button onClick={()=>changeStatus(task.id, 'Pendente')} className="flex-1 py-1 text-xs font-bold rounded border border-gray-300 dark:border-slate-500 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors">Pendente</button>}
-                            {task.status !== 'Em Andamento' && task.status !== 'Concluída' && <button onClick={()=>changeStatus(task.id, 'Em Andamento')} className="flex-1 py-1 text-xs font-bold rounded bg-mercantil-blue text-white hover:bg-blue-800 shadow-sm transition-colors">Iniciar</button>}
-                            {task.status !== 'Concluída' && <button onClick={()=>changeStatus(task.id, 'Concluída')} className="flex-1 py-1 text-xs font-bold rounded bg-green-600 text-white hover:bg-green-700 shadow-sm transition-colors"><i className="fas fa-check"></i> Concluir</button>}
+                        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 mt-auto" onClick={e => e.stopPropagation()}>
+                            {task.status !== 'Pendente' && <button onClick={()=>changeStatus(task.id, 'Pendente')} className="w-full sm:flex-1 py-1 text-xs font-bold rounded border border-gray-300 dark:border-slate-500 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors">Pendente</button>}
+                            {task.status !== 'Em Andamento' && task.status !== 'Concluída' && <button onClick={()=>changeStatus(task.id, 'Em Andamento')} className="w-full sm:flex-1 py-1 text-xs font-bold rounded bg-mercantil-blue text-white hover:bg-blue-800 shadow-sm transition-colors">Iniciar</button>}
+                            {task.status !== 'Concluída' && <button onClick={()=>changeStatus(task.id, 'Concluída')} className="w-full sm:flex-1 py-1 text-xs font-bold rounded bg-green-600 text-white hover:bg-green-700 shadow-sm transition-colors"><i className="fas fa-check"></i> Concluir</button>}
                         </div>
                         
                         <button onClick={(e)=>{e.stopPropagation(); deleteTask(task.id);}} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><i className="fas fa-trash text-xs"></i></button>
@@ -598,21 +668,21 @@
             };
 
             return (
-                <div className="flex flex-col h-full fade-in">
-                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex justify-between items-center rounded-t-xl">
+                <div className="flex flex-col h-full fade-in w-full">
+                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-t-xl w-full">
                         <div>
                             <h2 className="text-xl font-bold text-mercantil-dark dark:text-white flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-center text-mercantil-orange"><i className="fas fa-check-square"></i></div>
+                                <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-center text-mercantil-orange shrink-0"><i className="fas fa-check-square"></i></div>
                                 Gestão de Tarefas
                             </h2>
                             <p className="text-sm text-gray-500 mt-1">Quadro Kanban integrado com todas as áreas do ERP.</p>
                         </div>
-                        <button onClick={() => openTaskModal()} className="bg-mercantil-blue hover:bg-blue-800 text-white px-5 py-2.5 rounded-lg font-bold transition shadow-sm flex items-center">
+                        <button onClick={() => openTaskModal()} className="w-full sm:w-auto bg-mercantil-blue hover:bg-blue-800 text-white px-5 py-2.5 rounded-lg font-bold transition shadow-sm flex items-center justify-center">
                             <i className="fas fa-plus mr-2"></i> Nova Tarefa
                         </button>
                     </div>
 
-                    <div className="flex-1 overflow-x-auto p-6 bg-gray-100 dark:bg-slate-900 custom-scroll rounded-b-xl border border-t-0 border-gray-200 dark:border-slate-700">
+                    <div className="flex-1 overflow-x-auto p-6 bg-gray-100 dark:bg-slate-900 custom-scroll rounded-b-xl border border-t-0 border-gray-200 dark:border-slate-700 w-full">
                         <div className="flex gap-6 min-w-max h-full">
                             {['Pendente', 'Em Andamento', 'Concluída'].map(coluna => {
                                 const columnTasks = tarefas.filter(t => t.status === coluna);
@@ -684,7 +754,7 @@
                                                         addResponsavel();
                                                     }
                                                 }}
-                                                className="flex-1 border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" 
+                                                className="flex-1 w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" 
                                                 placeholder="Adicionar nome..." 
                                             />
                                             <button 
@@ -725,9 +795,12 @@
                                                     <option value="Produtos">Produtos / Peças</option>
                                                     <option value="Kits">Kits</option>
                                                     <option value="CRM (Atendimentos)">CRM (Atendimentos)</option>
+                                                    <option value="Devoluções">Devoluções</option>
                                                     <option value="Qualidade">Qualidade (NCs)</option>
                                                     <option value="Marketing">Marketing</option>
                                                     <option value="Fretes">Fretes</option>
+                                                    <option value="Tarefas">Tarefas</option>
+                                                    <option value="Notas">Notas</option>
                                                 </select>
                                             </div>
                                             <div className="md:col-span-6">
@@ -747,9 +820,9 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700">
-                                    <button type="button" onClick={() => setModalData(null)} className="px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium">Cancelar</button>
-                                    <button type="submit" className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex items-center transition"><i className="fas fa-save mr-2"></i> Salvar Tarefa</button>
+                                <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700 w-full">
+                                    <button type="button" onClick={() => setModalData(null)} className="w-full sm:w-auto px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium text-center">Cancelar</button>
+                                    <button type="submit" className="w-full sm:w-auto px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex items-center justify-center transition text-center"><i className="fas fa-save mr-2"></i> Salvar Tarefa</button>
                                 </div>
                             </form>
                         </Modal>
@@ -799,7 +872,7 @@
                 
                 const newNota = {
                     ...data,
-                    conteudo: modalData.conteudo, // Pega o estado atualizado do editor
+                    conteudo: modalData.conteudo,
                     id: modalData.id || `NOTA-${Date.now()}`,
                     dataCriacao: modalData.dataCriacao || new Date().toISOString(),
                     vinculos: tempVinculos
@@ -829,7 +902,7 @@
 
             const NotaCard = ({ nota }) => {
                 return (
-                    <div className={`${nota.cor || 'bg-white dark:bg-slate-800'} rounded-lg shadow-sm border p-4 hover:shadow-md transition cursor-pointer relative group flex flex-col h-full`} onClick={() => openNotaModal(nota)}>
+                    <div className={`${nota.cor || 'bg-white dark:bg-slate-800'} rounded-lg shadow-sm border p-4 hover:shadow-md transition cursor-pointer relative group flex flex-col h-full w-full`} onClick={() => openNotaModal(nota)}>
                         <div className="flex justify-between items-start mb-2">
                             <h4 className="font-bold text-sm text-gray-800 dark:text-slate-100 pr-6 break-words">{nota.titulo || 'Sem Título'}</h4>
                             <span className="text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(nota.dataCriacao).toLocaleDateString()}</span>
@@ -852,21 +925,21 @@
             };
 
             return (
-                <div className="flex flex-col h-full fade-in">
-                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex justify-between items-center rounded-t-xl">
+                <div className="flex flex-col h-full fade-in w-full">
+                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-t-xl w-full">
                         <div>
                             <h2 className="text-xl font-bold text-mercantil-dark dark:text-white flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-center text-yellow-500"><i className="fas fa-sticky-note"></i></div>
+                                <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-center text-yellow-500 shrink-0"><i className="fas fa-sticky-note"></i></div>
                                 Bloco de Notas
                             </h2>
                             <p className="text-sm text-gray-500 mt-1">Anotações rápidas com suporte a Emojis, formatação e vínculos com o ERP.</p>
                         </div>
-                        <button onClick={() => openNotaModal()} className="bg-mercantil-blue hover:bg-blue-800 text-white px-5 py-2.5 rounded-lg font-bold transition shadow-sm flex items-center">
+                        <button onClick={() => openNotaModal()} className="w-full sm:w-auto bg-mercantil-blue hover:bg-blue-800 text-white px-5 py-2.5 rounded-lg font-bold transition shadow-sm flex items-center justify-center">
                             <i className="fas fa-plus mr-2"></i> Nova Nota
                         </button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-slate-900 custom-scroll rounded-b-xl border border-t-0 border-gray-200 dark:border-slate-700">
+                    <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-slate-900 custom-scroll rounded-b-xl border border-t-0 border-gray-200 dark:border-slate-700 w-full">
                         {notas.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-slate-500">
                                 <i className="fas fa-sticky-note text-6xl mb-4 opacity-50"></i>
@@ -874,7 +947,7 @@
                                 <p className="text-sm">Clique em "Nova Nota" para começar.</p>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 items-start">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 items-start w-full">
                                 {notas.map(nota => <NotaCard key={nota.id} nota={nota} />)}
                             </div>
                         )}
@@ -899,7 +972,7 @@
 
                                 <div>
                                     <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-2">Cor da Nota</label>
-                                    <div className="flex gap-3">
+                                    <div className="flex flex-wrap gap-3">
                                         {[
                                             { value: 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600', color: 'bg-gray-100' },
                                             { value: 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-700', color: 'bg-yellow-300' },
@@ -937,9 +1010,11 @@
                                                 <option value="Produtos">Produtos / Peças</option>
                                                 <option value="Kits">Kits</option>
                                                 <option value="CRM (Atendimentos)">CRM (Atendimentos)</option>
+                                                <option value="Devoluções">Devoluções</option>
                                                 <option value="Qualidade">Qualidade (NCs)</option>
                                                 <option value="Marketing">Marketing</option>
                                                 <option value="Fretes">Fretes</option>
+                                                <option value="Tarefas">Tarefas</option>
                                             </select>
                                         </div>
                                         <div className="md:col-span-6">
@@ -958,9 +1033,9 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700">
-                                    <button type="button" onClick={() => setModalData(null)} className="px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium">Cancelar</button>
-                                    <button type="submit" className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex items-center transition"><i className="fas fa-save mr-2"></i> Salvar Nota</button>
+                                <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700 w-full">
+                                    <button type="button" onClick={() => setModalData(null)} className="w-full sm:w-auto px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium text-center">Cancelar</button>
+                                    <button type="submit" className="w-full sm:w-auto px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex items-center justify-center transition text-center"><i className="fas fa-save mr-2"></i> Salvar Nota</button>
                                 </div>
                             </form>
                         </Modal>
@@ -969,7 +1044,7 @@
             );
         };
 
-        const BaseManager = ({ title, icon, data, columns, formConfig, onSave, onDelete, onValidate, showToast }) => {
+        const BaseManager = ({ title, icon, data, columns, formConfig, onSave, onDelete, onValidate, showToast, db }) => {
             const [editModal, setEditModal] = useState(null);
             const [search, setSearch] = useState('');
             
@@ -1007,22 +1082,24 @@
 
             return (
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col h-full fade-in w-full overflow-hidden">
-                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col lg:flex-row justify-between items-center gap-4 rounded-t-xl w-full">
+                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 rounded-t-xl w-full">
                         <h2 className="text-xl font-bold text-mercantil-dark dark:text-white flex items-center gap-3">
                             <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-center text-mercantil-blue shrink-0"><i className={icon}></i></div>
                             <span className="truncate">{title}</span>
                         </h2>
-                        <div className="flex flex-col sm:flex-row w-full lg:w-auto gap-3">
+                        <div className="flex flex-col sm:flex-row flex-wrap w-full lg:w-auto gap-3">
                             <div className="relative w-full sm:w-64">
                                 <i className="fas fa-search absolute left-3 top-3 text-gray-400"></i>
                                 <input type="text" placeholder="Buscar registros..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm" value={search} onChange={e=>setSearch(e.target.value)} />
                             </div>
-                            <button onClick={handleExportCSV} className="bg-green-600 hover:bg-green-800 text-white px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center whitespace-nowrap text-sm">
-                                <i className="fas fa-file-csv mr-2"></i>Exportar CSV
-                            </button>
-                            <button onClick={() => setEditModal({})} className="bg-mercantil-blue hover:bg-blue-800 text-white px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center whitespace-nowrap text-sm">
-                                <i className="fas fa-plus mr-2"></i>Novo
-                            </button>
+                            <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
+                                <button onClick={handleExportCSV} className="w-full sm:w-auto bg-green-600 hover:bg-green-800 text-white px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center whitespace-nowrap text-sm">
+                                    <i className="fas fa-file-csv mr-2"></i>Exportar CSV
+                                </button>
+                                <button onClick={() => setEditModal({})} className="w-full sm:w-auto bg-mercantil-blue hover:bg-blue-800 text-white px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center whitespace-nowrap text-sm">
+                                    <i className="fas fa-plus mr-2"></i>Novo
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div className="w-full overflow-x-auto custom-scroll flex-1 p-0">
@@ -1053,9 +1130,39 @@
                     </div>
                     {editModal && (
                         <Modal title={editModal.id ? `Editar: ${title}` : `Novo Registro: ${title}`} onClose={()=>setEditModal(null)}>
-                            <AutoForm config={formConfig} initialData={editModal} onSave={handleSave} onCancel={()=>setEditModal(null)} />
+                            <AutoForm config={formConfig} initialData={editModal} onSave={handleSave} onCancel={()=>setEditModal(null)} db={db} />
                         </Modal>
                     )}
+                </div>
+            );
+        };
+
+        // --- COMPONENTE CATÁLOGO INTEGRADO (Produtos & Kits) ---
+        const CatalogoManager = ({ produtos, setProdutos, kits, setKits, produtosConfig, kitsConfig, catalogColumns, showToast, saveStateRecord, deleteStateRecord, db }) => {
+            const [tab, setTab] = useState('produtos');
+
+            return (
+                <div className="flex flex-col h-full fade-in space-y-4 w-full">
+                    <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-wrap gap-2 w-full">
+                        <button onClick={() => setTab('produtos')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${tab === 'produtos' ? 'bg-mercantil-blue text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600'}`}>
+                            <i className="fas fa-box mr-2"></i> Peças & Motores
+                        </button>
+                        <button onClick={() => setTab('kits')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${tab === 'kits' ? 'bg-mercantil-blue text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600'}`}>
+                            <i className="fas fa-boxes-stacked mr-2"></i> Kits Montados
+                        </button>
+                    </div>
+                    <div className="flex-1 w-full h-full relative">
+                        {tab === 'produtos' && (
+                            <BaseManager title="Catálogo de Peças (Produtos)" icon="fas fa-box" data={produtos} formConfig={produtosConfig} showToast={showToast} db={db}
+                                onSave={(data) => saveStateRecord(data, produtos, setProdutos)} onDelete={(id) => deleteStateRecord(id, produtos, setProdutos)}
+                                columns={catalogColumns} />
+                        )}
+                        {tab === 'kits' && (
+                            <BaseManager title="Catálogo de Kits" icon="fas fa-boxes-stacked" data={kits} formConfig={kitsConfig} showToast={showToast} db={db}
+                                onSave={(data) => saveStateRecord(data, kits, setKits)} onDelete={(id) => deleteStateRecord(id, kits, setKits)}
+                                columns={catalogColumns} />
+                        )}
+                    </div>
                 </div>
             );
         };
@@ -1192,10 +1299,10 @@
             return (
                 <div className="flex flex-col h-full fade-in space-y-6">
                     <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-wrap gap-2 w-full">
-                        <button onClick={() => setTab('consulta')} className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${tab === 'consulta' ? 'bg-mercantil-blue text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600'}`}>
+                        <button onClick={() => setTab('consulta')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${tab === 'consulta' ? 'bg-mercantil-blue text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600'}`}>
                             <i className="fas fa-search mr-2"></i> Consulta Cotação
                         </button>
-                        <button onClick={() => setTab('gestao')} className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${tab === 'gestao' ? 'bg-mercantil-blue text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600'}`}>
+                        <button onClick={() => setTab('gestao')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${tab === 'gestao' ? 'bg-mercantil-blue text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600'}`}>
                             <i className="fas fa-database mr-2"></i> Gestão da Base (Excel)
                         </button>
                     </div>
@@ -1208,7 +1315,7 @@
                                 </h2>
                                 
                                 <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4">
-                                    <div className="flex-1">
+                                    <div className="flex-1 w-full">
                                         <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">CEP ou Bairro/Município</label>
                                         <div className="relative">
                                             <i className="fas fa-map-marker-alt absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
@@ -1222,7 +1329,7 @@
                                             <input type="number" step="0.01" value={weight} onChange={e=>setWeight(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:text-white" placeholder="Ex: 5.5" />
                                         </div>
                                     </div>
-                                    <div className="flex items-end">
+                                    <div className="flex items-end w-full md:w-auto">
                                         <button type="submit" className="w-full md:w-auto px-6 py-3 rounded-lg font-bold text-white bg-mercantil-orange hover:bg-orange-700 transition-colors shadow-sm flex items-center justify-center gap-2">
                                             <i className="fas fa-search"></i> Calcular
                                         </button>
@@ -1251,7 +1358,7 @@
                                                         <p className="text-sm mt-1 flex items-center gap-2"><i className="fas fa-map-marker-alt"></i> CEP: <span className="font-mono">{result.cepStart || '00000-000'}</span> até <span className="font-mono">{result.cepEnd || '99999-999'}</span></p>
                                                         <p className="text-sm mt-1 flex items-center gap-2"><i className="fas fa-box"></i> Peso: <span className="font-bold">{result.weightMin ? result.weightMin + 'kg' : '0kg'}</span> a <span className="font-bold">{result.weightMax ? result.weightMax + 'kg' : 'Ilimitado'}</span></p>
                                                     </div>
-                                                    <div className="bg-green-50 dark:bg-green-900/30 border border-green-100 dark:border-green-800 rounded-lg px-6 py-3 text-center min-w-[150px]">
+                                                    <div className="bg-green-50 dark:bg-green-900/30 border border-green-100 dark:border-green-800 rounded-lg px-6 py-3 text-center w-full sm:w-auto min-w-[150px]">
                                                         <span className="block text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider mb-1">Valor do Frete</span>
                                                         <span className="text-2xl font-bold text-green-700 dark:text-green-400 flex items-center justify-center gap-1">R$ {result.price || 'A Combinar'}</span>
                                                     </div>
@@ -1266,17 +1373,17 @@
 
                     {tab === 'gestao' && (
                         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col flex-1 min-h-[500px] fade-in overflow-hidden w-full">
-                            <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                                 <div>
                                     <h2 className="text-lg font-bold text-gray-800 dark:text-white">Editor da Base de Dados</h2>
                                     <p className="text-xs text-gray-500 dark:text-gray-400">Edite na tabela. Salve como planilha para não perder os dados.</p>
                                 </div>
-                                <div className="flex flex-wrap gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
                                     <input type="file" id="file-input-frete" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleImportUniversal} />
-                                    <button onClick={() => document.getElementById('file-input-frete').click()} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
+                                    <button onClick={() => document.getElementById('file-input-frete').click()} className="w-full sm:w-auto flex justify-center items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
                                         <i className="fas fa-upload"></i> Importar (XLSX/CSV)
                                     </button>
-                                    <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 bg-mercantil-blue text-white rounded-md text-sm font-bold hover:bg-blue-800 transition-colors shadow-sm">
+                                    <button onClick={handleExport} className="w-full sm:w-auto flex justify-center items-center gap-2 px-3 py-2 bg-mercantil-blue text-white rounded-md text-sm font-bold hover:bg-blue-800 transition-colors shadow-sm">
                                         <i className="fas fa-download"></i> Exportar
                                     </button>
                                 </div>
@@ -1314,9 +1421,9 @@
                                     </tbody>
                                 </table>
                             </div>
-                            <div className="p-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 rounded-b-xl flex justify-between items-center">
+                            <div className="p-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 rounded-b-xl flex flex-col sm:flex-row justify-between items-center gap-3">
                                 <span className="text-sm text-gray-500 dark:text-gray-400 font-bold">Total de registros: {data.length}</span>
-                                <button onClick={addRow} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-mercantil-blue dark:text-blue-400 rounded-md text-sm font-bold hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
+                                <button onClick={addRow} className="w-full sm:w-auto flex justify-center items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-mercantil-blue dark:text-blue-400 rounded-md text-sm font-bold hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
                                     <i className="fas fa-plus"></i> Adicionar Linha
                                 </button>
                             </div>
@@ -1342,6 +1449,7 @@
             const [produtos, setProdutos] = useLocalStorage('mrc_produtos', []);
             const [kits, setKits] = useLocalStorage('mrc_kits', []);
             const [atendimentos, setAtendimentos] = useLocalStorage('mrc_atendimentos', []);
+            const [devolucoes, setDevolucoes] = useLocalStorage('mrc_devolucoes', []);
             const [qualidade, setQualidade] = useLocalStorage('mrc_qualidade', []);
             const [marketing, setMarketing] = useLocalStorage('mrc_marketing', []);
             const [gerencia, setGerencia] = useLocalStorage('mrc_gerencia', []);
@@ -1351,6 +1459,8 @@
             const [notas, setNotas] = useLocalStorage('mrc_notas', []);
             const [lastBackup, setLastBackup] = useLocalStorage('mrc_last_backup_time', null);
 
+            const db = useMemo(() => ({ produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas }), [produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas]);
+
             useEffect(() => {
                 if (darkMode) document.documentElement.classList.add('dark');
                 else document.documentElement.classList.remove('dark');
@@ -1358,7 +1468,7 @@
 
             useEffect(() => {
                 const forceSystemBackup = () => {
-                    const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas, notas };
+                    const fullSystemDump = { produtos, kits, atendimentos, devolucoes, qualidade, marketing, gerencia, compliance, fretes, tarefas, notas };
                     localStorage.setItem('mrc_auto_backup_dump', JSON.stringify(fullSystemDump));
                     setLastBackup(new Date().toISOString());
                 };
@@ -1371,7 +1481,7 @@
                     }
                 }, 60000);
                 return () => clearInterval(intervalId);
-            }, [produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas, notas, lastBackup, setLastBackup]);
+            }, [produtos, kits, atendimentos, devolucoes, qualidade, marketing, gerencia, compliance, fretes, tarefas, notas, lastBackup, setLastBackup]);
 
             const saveStateRecord = (data, stateArray, setter) => {
                 const arr = [...(stateArray || [])];
@@ -1470,10 +1580,39 @@
                 { name: 'descricao', label: 'Relato do Cliente / Ocorrência', type: 'textarea', full: true, required: true }
             ];
 
+            const devolucoesConfig = [
+                { name: 'protocolo', label: 'Protocolo de Devolução *', type: 'text', readOnly: true, button: 'Gerar Protocolo DEV', icon: 'fas fa-undo', full: true, required: true, placeholder: 'Clique no botão para autenticar e gerar o protocolo',
+                  action: (set) => {
+                      showToast('Conectando ao World Time API...', 'info');
+                      fetch('https://worldtimeapi.org/api/timezone/America/Sao_Paulo')
+                        .then(res => res.json())
+                        .then(d => {
+                            const dt = new Date(d.datetime);
+                            const p = `DEV-${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}-${String(dt.getHours()).padStart(2,'0')}${String(dt.getMinutes()).padStart(2,'0')}${String(dt.getSeconds()).padStart(2,'0')}`;
+                            set(prev => ({...prev, protocolo: p, dataHoraOficial: d.datetime}));
+                            showToast('Protocolo de Devolução gerado.', 'success');
+                        })
+                        .catch(e => {
+                            const dt = new Date();
+                            const p = `DEV-${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}-${String(dt.getHours()).padStart(2,'0')}${String(dt.getMinutes()).padStart(2,'0')}${String(dt.getSeconds()).padStart(2,'0')}`;
+                            set(prev => ({...prev, protocolo: p, dataHoraOficial: dt.toISOString()}));
+                        });
+                  }
+                },
+                { name: 'pedido', label: 'Número do Pedido', type: 'text', required: true, half: true, placeholder: 'Ex: PED-12345678' },
+                { name: 'cliente', label: 'Nome do Cliente / Comprador', type: 'text', required: true, half: true },
+                { name: 'origem', label: 'Origem da Compra/Envio *', type: 'select', options: ['Full', 'Envio Direto (Galpão)', 'Outros'], required: true, half: true },
+                { name: 'embalagem', label: 'Embalagem de Retorno *', type: 'select', options: ['Original', 'Modificada', 'Outros'], required: true, half: true },
+                { name: 'estado', label: 'Estado do Produto *', type: 'select', options: ['Perfeito / Revendável', 'Avariado', 'Faltando Peças', 'Usado', 'Outros'], required: true, half: true },
+                { name: 'status', label: 'Status da Devolução', type: 'select', options: ['Aguardando Chegada', 'Em Conferência', 'Finalizado - Reintegrado', 'Finalizado - Descarte', 'Em Disputa/Mediação'], half: true },
+                { name: 'motivo', label: 'Motivo da Devolução *', type: 'textarea', full: true, required: true },
+                { name: 'vinculos', label: 'Vínculos Globais (Produtos, Atendimentos, etc.)', type: 'vinculos_globais', full: true }
+            ];
+
             const qualidadeConfig = [
                 { name: 'data', label: 'Data da Ocorrência', type: 'date', required: true, half: true },
                 { name: 'tipo', label: 'Tipo de Indicador', type: 'select', options: ['Não Conformidade (NC) Interna', 'Falha Logística/Expedição', 'Reclamação de Peça (Garantia)', 'Sugestão de Melhoria', 'Auditoria de Processos'], required: true, half: true },
-                { name: 'protocolo', label: 'Vincular Protocolo CRM (Opcional)', type: 'text', placeholder: 'Ex: PRT-20260608...', half: true },
+                { name: 'protocolo', label: 'Vincular Protocolo CRM/DEV (Opcional)', type: 'text', placeholder: 'Ex: PRT-20260608...', half: true },
                 { name: 'status', label: 'Status da Investigação', type: 'select', options: ['Registrado', 'Em Análise de Causa Raiz', 'Ação Corretiva Aplicada', 'Encerrado com Sucesso'], half: true },
                 { name: 'descricao', label: 'Descrição do Desvio', type: 'textarea', full: true, required: true },
                 { name: 'acao', label: 'Plano de Ação (Preventiva/Corretiva)', type: 'textarea', full: true }
@@ -1546,6 +1685,7 @@
 
             // --- CÁLCULOS DE PENDÊNCIAS ---
             const atendimentosPendentes = (atendimentos || []).filter(a => a.status && !['Resolvido', 'Cancelado'].includes(a.status)).length;
+            const devolucoesPendentes = (devolucoes || []).filter(d => !d.status || !d.status.includes('Finalizado')).length;
             const qualidadePendentes = (qualidade || []).filter(q => !q.status || !['Encerrado com Sucesso'].includes(q.status)).length;
             const produtosPendentes = (produtos || []).filter(p => p.Status !== 'Ativo' || !p.SKU || !p['Título'] || !p['EAN/GTIN'] || !p['Peso (kg)'] || !p['Comprimento (cm)'] || !p['Largura (cm)'] || !p['Altura (cm)']).length;
             const kitsPendentes = (kits || []).filter(k => k.Status !== 'Ativo' || !k.SKU || !k['Título'] || !k['EAN/GTIN'] || !k['Peso (kg)'] || !k['Comprimento (cm)'] || !k['Largura (cm)'] || !k['Altura (cm)']).length;
@@ -1593,9 +1733,9 @@
                                 <ul className="space-y-3 text-sm dark:text-slate-300">
                                     <li className="flex justify-between items-center"><span>Modo Noturno (Dark)</span><span className="font-bold">{darkMode ? 'Ativado' : 'Desativado'}</span></li>
                                     <li className="flex justify-between items-center"><span>Status do Banco de Dados (Supabase)</span><span className="text-green-600 dark:text-green-400 font-bold"><i className="fas fa-cloud text-mercantil-blue dark:text-blue-400 mr-1"></i> Conectado (Nuvem)</span></li>
-                                    <li className="flex justify-between items-center p-2 bg-gray-50 dark:bg-slate-900 rounded border dark:border-slate-700 mt-2">
+                                    <li className="flex justify-between items-center p-2 bg-gray-50 dark:bg-slate-900 rounded border dark:border-slate-700 mt-2 flex-wrap gap-2">
                                         <span className="text-mercantil-orange font-bold"><i className="fas fa-file-download mr-2"></i>Último Backup Local (JSON):</span>
-                                        <span className="font-mono text-xs">{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nenhum backup gerado'}</span>
+                                        <span className="font-mono text-xs w-full text-right sm:w-auto">{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nenhum backup gerado'}</span>
                                     </li>
                                 </ul>
                             </div>
@@ -1606,7 +1746,7 @@
 
             const ImportExport = () => {
                 const forceBackupNow = () => {
-                    const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas, notas };
+                    const fullSystemDump = { produtos, kits, atendimentos, devolucoes, qualidade, marketing, gerencia, compliance, fretes, tarefas, notas };
                     localStorage.setItem('mrc_auto_backup_dump', JSON.stringify(fullSystemDump));
                     setLastBackup(new Date().toISOString());
                     showToast('Backup manual gravado com sucesso no navegador.', 'success');
@@ -1633,11 +1773,12 @@
                         try {
                             const data = JSON.parse(evt.target.result);
                             
-                            if (data.produtos || data.kits || data.fretes || data.atendimentos || data.tarefas || data.notas) {
+                            if (data.produtos || data.kits || data.fretes || data.atendimentos || data.tarefas || data.notas || data.devolucoes) {
                                 if (window.confirm("ATENÇÃO CRÍTICA: Restaurar um backup irá APAGAR E SUBSTITUIR todos os dados da NUVEM e LOCAL pelo conteúdo deste arquivo. Tem certeza absoluta?")) {
                                     if(data.produtos) setProdutos(data.produtos);
                                     if(data.kits) setKits(data.kits);
                                     if(data.atendimentos) setAtendimentos(data.atendimentos);
+                                    if(data.devolucoes) setDevolucoes(data.devolucoes);
                                     if(data.qualidade) setQualidade(data.qualidade);
                                     if(data.marketing) setMarketing(data.marketing);
                                     if(data.gerencia) setGerencia(data.gerencia);
@@ -1694,22 +1835,22 @@
                                 </div>
                             </div>
 
-                            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700">
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 w-full">
                                 <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2"><i className="fas fa-shield-check text-green-500 mr-2"></i>Gerenciar Backups</h3>
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">A nuvem salva automaticamente, mas você pode exportar um arquivo de segurança do estado atual do sistema (JSON).</p>
                                 
                                 <div className="p-4 bg-gray-50 dark:bg-slate-900 border dark:border-slate-700 rounded-lg mb-6 flex flex-col gap-2">
                                     <div className="text-sm dark:text-slate-300"><strong>Último Backup Automático:</strong></div>
-                                    <div className="text-mercantil-blue dark:text-blue-400 font-mono text-lg">{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nenhum backup gerado'}</div>
+                                    <div className="text-mercantil-blue dark:text-blue-400 font-mono text-lg break-words">{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nenhum backup gerado'}</div>
                                 </div>
 
-                                <div className="flex gap-3 mb-4">
-                                    <button onClick={forceBackupNow} className="flex-1 bg-mercantil-dark text-white p-3 rounded-lg hover:bg-black font-bold shadow transition"><i className="fas fa-save mr-2"></i> Gerar JSON Base</button>
-                                    <button onClick={downloadBackup} className="flex-1 bg-green-600 text-white p-3 rounded-lg hover:bg-green-800 font-bold shadow transition"><i className="fas fa-file-download mr-2"></i> Baixar JSON Base</button>
+                                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                                    <button onClick={forceBackupNow} className="w-full sm:flex-1 bg-mercantil-dark text-white p-3 rounded-lg hover:bg-black font-bold shadow transition flex justify-center items-center"><i className="fas fa-save mr-2"></i> Gerar JSON Base</button>
+                                    <button onClick={downloadBackup} className="w-full sm:flex-1 bg-green-600 text-white p-3 rounded-lg hover:bg-green-800 font-bold shadow transition flex justify-center items-center"><i className="fas fa-file-download mr-2"></i> Baixar JSON Base</button>
                                 </div>
 
                                 <div className="border-t dark:border-slate-700 pt-4 mt-2">
-                                    <label className="flex items-center justify-center gap-2 w-full p-3 bg-blue-50 dark:bg-slate-700 text-mercantil-blue dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-slate-600 cursor-pointer transition font-bold shadow-sm">
+                                    <label className="flex items-center justify-center gap-2 w-full p-3 bg-blue-50 dark:bg-slate-700 text-mercantil-blue dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-slate-600 cursor-pointer transition font-bold shadow-sm text-center">
                                         <i className="fas fa-cloud-upload-alt text-lg"></i> Restaurar JSON na Nuvem
                                         <input type="file" accept=".json" className="hidden" onChange={handleRestoreJSON} />
                                     </label>
@@ -1728,7 +1869,7 @@
                                             window.location.reload();
                                         });
                                     }
-                                }} className="bg-red-600 text-white px-6 py-2 rounded shadow hover:bg-red-800 transition font-bold">Resetar Todo o ERP</button>
+                                }} className="w-full sm:w-auto bg-red-600 text-white px-6 py-2 rounded shadow hover:bg-red-800 transition font-bold">Resetar Todo o ERP</button>
                             </div>
                         </div>
                     </div>
@@ -1784,8 +1925,8 @@
                             <MenuItem id="notas" icon="fas fa-sticky-note" label="Bloco de Notas" />
 
                             <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Comercial</p></div>
-                            <MenuItem id="produtos" icon="fas fa-box" label="Peças & Motores" badge={produtosPendentes} />
-                            <MenuItem id="kits" icon="fas fa-boxes-stacked" label="Kits Montados" badge={kitsPendentes} />
+                            <MenuItem id="catalogo" icon="fas fa-cubes" label="Catálogo (Peças & Kits)" badge={produtosPendentes + kitsPendentes} />
+                            <MenuItem id="devolucoes" icon="fas fa-undo-alt" label="Devoluções" badge={devolucoesPendentes} />
                             <MenuItem id="fretes" icon="fas fa-truck" label="Gestão de Fretes" badge={fretesPendentes} />
                             
                             <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Atendimento & Qualidade</p></div>
@@ -1823,7 +1964,9 @@
                     <main className="flex-1 flex flex-col h-full overflow-hidden mt-[72px] md:mt-0 relative w-full">
                         <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 p-4 sm:px-8 hidden md:flex justify-between items-center shadow-sm z-10 w-full">
                             <h2 className="text-2xl font-bold text-gray-800 dark:text-white capitalize flex items-center gap-2">
-                                {activeMenu === 'dados' ? 'Segurança e Dados' : activeMenu.replace('-', ' ')}
+                                {activeMenu === 'dados' ? 'Segurança e Dados' : 
+                                 activeMenu === 'catalogo' ? 'Catálogo Comercial' : 
+                                 activeMenu.replace('-', ' ')}
                             </h2>
                             <div className="flex items-center gap-5">
                                 <button onClick={() => setDarkMode(!darkMode)} className="text-xl p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 transition" title="Alternar Tema">
@@ -1841,59 +1984,65 @@
                             
                             {activeMenu === 'tarefas' && (
                                 <TarefasManager 
-                                    tarefas={tarefas} setTarefas={setTarefas} showToast={showToast} 
-                                    db={{ produtos, kits, atendimentos, qualidade, fretes, marketing }} 
+                                    tarefas={tarefas} setTarefas={setTarefas} showToast={showToast} db={db} 
                                 />
                             )}
                             
                             {activeMenu === 'notas' && (
                                 <NotasManager 
-                                    notas={notas} setNotas={setNotas} showToast={showToast} 
-                                    db={{ produtos, kits, atendimentos, qualidade, fretes, marketing }} 
+                                    notas={notas} setNotas={setNotas} showToast={showToast} db={db} 
                                 />
                             )}
 
+                            {activeMenu === 'catalogo' && (
+                                <CatalogoManager 
+                                    produtos={produtos} setProdutos={setProdutos}
+                                    kits={kits} setKits={setKits}
+                                    produtosConfig={produtosConfig} kitsConfig={kitsConfig}
+                                    catalogColumns={catalogColumns}
+                                    showToast={showToast}
+                                    saveStateRecord={saveStateRecord}
+                                    deleteStateRecord={deleteStateRecord}
+                                    db={db}
+                                />
+                            )}
+
+                            {activeMenu === 'devolucoes' && (
+                                <BaseManager title="Gestão de Devoluções" icon="fas fa-undo-alt" data={devolucoes} formConfig={devolucoesConfig} showToast={showToast} db={db}
+                                    onValidate={(data) => { if(!data.protocolo) { showToast('Obrigatório gerar o Protocolo DEV oficial antes de salvar!', 'error'); return false; } return true; }}
+                                    onSave={(data) => saveStateRecord(data, devolucoes, setDevolucoes)} onDelete={(id) => deleteStateRecord(id, devolucoes, setDevolucoes)}
+                                    columns={[ { field: 'protocolo', header: 'Protocolo DEV', render: (val) => <span className="font-mono text-mercantil-light dark:text-blue-400">{val}</span> }, { field: 'pedido', header: 'Pedido', render: (val) => <span className="font-bold text-xs">{val || '-'}</span> }, { field: 'cliente', header: 'Cliente' }, { field: 'origem', header: 'Origem' }, { field: 'status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val && val.includes('Finalizado') ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'}`}>{val || 'Aguardando'}</span> } ]} />
+                            )}
+
                             {activeMenu === 'crm' && (
-                                <BaseManager title="Gestão de Atendimento Integrada (CRM)" icon="fas fa-headset" data={atendimentos} formConfig={crmConfig} showToast={showToast}
+                                <BaseManager title="Gestão de Atendimento Integrada (CRM)" icon="fas fa-headset" data={atendimentos} formConfig={crmConfig} showToast={showToast} db={db}
                                     onValidate={(data) => { if(!data.protocolo) { showToast('Obrigatório gerar o Protocolo de Atendimento oficial antes de salvar!', 'error'); return false; } return true; }}
                                     onSave={(data) => saveStateRecord(data, atendimentos, setAtendimentos)} onDelete={(id) => deleteStateRecord(id, atendimentos, setAtendimentos)}
                                     columns={[ { field: 'protocolo', header: 'Protocolo', render: (val) => <span className="font-mono text-mercantil-blue dark:text-blue-400">{val}</span> }, { field: 'pedido', header: 'Pedido', render: (val) => <span className="font-bold text-xs">{val || '-'}</span> }, { field: 'cliente', header: 'Cliente' }, { field: 'canal', header: 'Canal' }, { field: 'status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val && val.includes('Resolvido') ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{val}</span> } ]} />
                             )}
 
                             {activeMenu === 'qualidade' && (
-                                <BaseManager title="Gestão de Qualidade & NCs" icon="fas fa-medal" data={qualidade} formConfig={qualidadeConfig} showToast={showToast}
+                                <BaseManager title="Gestão de Qualidade & NCs" icon="fas fa-medal" data={qualidade} formConfig={qualidadeConfig} showToast={showToast} db={db}
                                     onSave={(data) => saveStateRecord(data, qualidade, setQualidade)} onDelete={(id) => deleteStateRecord(id, qualidade, setQualidade)}
                                     columns={[ { field: 'data', header: 'Data' }, { field: 'tipo', header: 'Tipo/Indicador' }, { field: 'protocolo', header: 'Protocolo Ref.', render: (val) => val ? <span className="font-mono text-xs">{val}</span> : '-' }, { field: 'status', header: 'Status', render: (val) => <span className="font-bold text-xs uppercase text-gray-500 dark:text-gray-400">{val}</span> } ]} />
                             )}
 
                             {activeMenu === 'marketing' && (
-                                <BaseManager title="Planejamento de Marketing" icon="fas fa-bullhorn" data={marketing} formConfig={marketingConfig} showToast={showToast}
+                                <BaseManager title="Planejamento de Marketing" icon="fas fa-bullhorn" data={marketing} formConfig={marketingConfig} showToast={showToast} db={db}
                                     onSave={(data) => saveStateRecord(data, marketing, setMarketing)} onDelete={(id) => deleteStateRecord(id, marketing, setMarketing)}
                                     columns={[ { field: 'data', header: 'Data Prevista' }, { field: 'plataforma', header: 'Canal Mídia' }, { field: 'tipo', header: 'Formato' }, { field: 'status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val==='Publicado'?'bg-blue-100 text-blue-700':'bg-gray-200 text-gray-700'}`}>{val}</span> } ]} />
                             )}
 
                             {activeMenu === 'gerencia' && (
-                                <BaseManager title="Área da Gerência (Registros Internos)" icon="fas fa-briefcase" data={gerencia} formConfig={gerenciaConfig} showToast={showToast}
+                                <BaseManager title="Área da Gerência (Registros Internos)" icon="fas fa-briefcase" data={gerencia} formConfig={gerenciaConfig} showToast={showToast} db={db}
                                     onSave={(data) => saveStateRecord(data, gerencia, setGerencia)} onDelete={(id) => deleteStateRecord(id, gerencia, setGerencia)}
                                     columns={[ { field: 'data', header: 'Data' }, { field: 'tipo', header: 'Categoria' }, { field: 'titulo', header: 'Assunto' } ]} />
                             )}
 
                             {activeMenu === 'compliance' && (
-                                <BaseManager title="Políticas & Compliance" icon="fas fa-shield-alt" data={compliance} formConfig={complianceConfig} showToast={showToast}
+                                <BaseManager title="Políticas & Compliance" icon="fas fa-shield-alt" data={compliance} formConfig={complianceConfig} showToast={showToast} db={db}
                                     onSave={(data) => saveStateRecord(data, compliance, setCompliance)} onDelete={(id) => deleteStateRecord(id, compliance, setCompliance)}
                                     columns={[ { field: 'codigo', header: 'Código', render: (val) => <span className="font-mono text-mercantil-orange">{val}</span> }, { field: 'titulo', header: 'Título Documento' }, { field: 'dataRev', header: 'Última Revisão' }, { field: 'status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val==='Vigente (Aprovada)'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}`}>{val}</span> } ]} />
-                            )}
-
-                            {activeMenu === 'produtos' && (
-                                <BaseManager title="Catálogo de Peças (Produtos)" icon="fas fa-box" data={produtos} formConfig={produtosConfig} showToast={showToast}
-                                    onSave={(data) => saveStateRecord(data, produtos, setProdutos)} onDelete={(id) => deleteStateRecord(id, produtos, setProdutos)}
-                                    columns={catalogColumns} />
-                            )}
-
-                            {activeMenu === 'kits' && (
-                                <BaseManager title="Catálogo de Kits" icon="fas fa-boxes-stacked" data={kits} formConfig={kitsConfig} showToast={showToast}
-                                    onSave={(data) => saveStateRecord(data, kits, setKits)} onDelete={(id) => deleteStateRecord(id, kits, setKits)}
-                                    columns={catalogColumns} />
                             )}
                             
                             {activeMenu === 'fretes' && (
