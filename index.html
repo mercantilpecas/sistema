@@ -61,6 +61,11 @@
             outline: none;
         }
         .custom-scroll { overflow-y: auto; }
+        
+        /* Estilos do Editor de Texto Rico */
+        .rich-editor-content ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+        .rich-editor-content ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+        .rich-editor-content a { color: #3b82f6; text-decoration: underline; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 transition-colors duration-200">
@@ -74,7 +79,7 @@
     </div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
         // --- HOOK CUSTOMIZADO PARA LOCALSTORAGE ---
         const useLocalStorage = (key, initialValue) => {
@@ -137,7 +142,79 @@
             }
         };
 
-        // --- COMPONENTE CUSTOMIZADO PARA MÚLTIPLOS VÍNCULOS COMERCIAIS (PRODUTOS/KITS) ---
+        // --- COMPONENTE: LOGO MERCANTIL ---
+        const LogoMercantil = () => (
+            <div className="relative flex items-center justify-center w-10 h-10 shrink-0">
+                <img 
+                    src="https://raw.githubusercontent.com/mercantil/logo/main/2.png" 
+                    alt="Mercantil Logo" 
+                    className="w-10 h-10 rounded-full object-cover shadow-sm z-10 border-2 border-transparent"
+                    onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextElementSibling.style.display = 'flex';
+                    }}
+                />
+                <div style={{ display: 'none' }} className="absolute inset-0 rounded-full bg-white text-mercantil-orange items-center justify-center font-bold text-xl shadow-md border-2 border-mercantil-orange z-0">
+                    M
+                </div>
+            </div>
+        );
+
+        // --- COMPONENTE: EDITOR DE TEXTO RICO (BLOCO DE NOTAS) ---
+        const RichTextEditor = ({ value, onChange, placeholder }) => {
+            const editorRef = useRef(null);
+            
+            useEffect(() => {
+                if (editorRef.current && value !== editorRef.current.innerHTML && document.activeElement !== editorRef.current) {
+                    editorRef.current.innerHTML = value || '';
+                }
+            }, [value]);
+
+            const handleInput = () => {
+                if (editorRef.current) {
+                    onChange(editorRef.current.innerHTML);
+                }
+            };
+
+            const execCmd = (cmd, arg = null) => {
+                document.execCommand(cmd, false, arg);
+                if (editorRef.current) editorRef.current.focus();
+                handleInput();
+            };
+
+            const insertEmoji = (emoji) => {
+                execCmd('insertText', emoji);
+            };
+
+            return (
+                <div className="border border-gray-300 dark:border-slate-600 rounded-lg overflow-hidden flex flex-col bg-white dark:bg-slate-900 focus-within:ring-2 focus-within:ring-mercantil-blue transition-all">
+                    <div className="bg-gray-100 dark:bg-slate-800 border-b border-gray-300 dark:border-slate-600 p-2 flex gap-1 flex-wrap items-center">
+                        <button type="button" onClick={() => execCmd('bold')} className="p-1.5 px-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition"><i className="fas fa-bold"></i></button>
+                        <button type="button" onClick={() => execCmd('italic')} className="p-1.5 px-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition"><i className="fas fa-italic"></i></button>
+                        <button type="button" onClick={() => execCmd('underline')} className="p-1.5 px-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition"><i className="fas fa-underline"></i></button>
+                        <div className="w-px h-5 bg-gray-300 dark:bg-slate-600 mx-1"></div>
+                        <button type="button" onClick={() => execCmd('insertUnorderedList')} className="p-1.5 px-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition" title="Lista"><i className="fas fa-list-ul"></i></button>
+                        <button type="button" onClick={() => execCmd('insertOrderedList')} className="p-1.5 px-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition" title="Lista Numerada"><i className="fas fa-list-ol"></i></button>
+                        <div className="w-px h-5 bg-gray-300 dark:bg-slate-600 mx-1"></div>
+                        <div className="flex gap-1 items-center">
+                            {['😀', '👍', '⚠️', '🔥', '✅', '💡', '📌', '📦'].map(e => (
+                                <button type="button" key={e} onClick={() => insertEmoji(e)} className="p-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded text-base transition">{e}</button>
+                            ))}
+                        </div>
+                    </div>
+                    <div 
+                        ref={editorRef}
+                        contentEditable 
+                        onInput={handleInput}
+                        onBlur={handleInput}
+                        data-placeholder={placeholder}
+                        className="p-4 min-h-[150px] outline-none text-sm text-gray-800 dark:text-slate-200 rich-editor-content empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400"
+                    />
+                </div>
+            );
+        };
+
+        // --- COMPONENTE: MÚLTIPLOS VÍNCULOS COMERCIAIS (PRODUTOS/KITS CRM) ---
         const ItensVinculadosManager = ({ value = [], onChange, produtosOptions = [], kitsOptions = [] }) => {
             const [tipo, setTipo] = useState('Produto');
             const [selecionado, setSelecionado] = useState('');
@@ -281,14 +358,26 @@
             );
         };
 
-        // --- COMPONENTE TAREFAS (Atualizado: Múltiplos Vínculos e Múltiplos Responsáveis) ---
+        // --- FUNÇÃO AUXILIAR GLOBAL PARA VÍNCULOS ---
+        const getGlobalLinkOptions = (tipo, db) => {
+            switch(tipo) {
+                case 'Produtos': return db.produtos.filter(p=>p.SKU).map(p => ({ id: p.SKU, label: `${p.SKU} - ${p['Título']?.substring(0,30)}` }));
+                case 'Kits': return db.kits.filter(k=>k.SKU).map(k => ({ id: k.SKU, label: `${k.SKU} - ${k['Título']?.substring(0,30)}` }));
+                case 'CRM (Atendimentos)': return db.atendimentos.filter(a=>a.protocolo).map(a => ({ id: a.protocolo, label: `${a.protocolo} - ${a.cliente}` }));
+                case 'Qualidade': return db.qualidade.filter(q=>q.data).map(q => ({ id: q.id, label: `NC: ${q.data} - ${q.tipo}` }));
+                case 'Marketing': return db.marketing.filter(m=>m.data).map(m => ({ id: m.id, label: `Pauta: ${m.data} - ${m.plataforma}` }));
+                case 'Fretes': return db.fretes.filter(f=>f.city).map(f => ({ id: f.id, label: `Frete: ${f.city} (${f.cepStart})` }));
+                default: return [];
+            }
+        };
+
+        // --- COMPONENTE GESTÃO DE TAREFAS (KANBAN) ---
         const TarefasManager = ({ tarefas, setTarefas, db, showToast }) => {
             const [modalData, setModalData] = useState(null);
             const [tempVinculos, setTempVinculos] = useState([]);
             const [currentVinculoTipo, setCurrentVinculoTipo] = useState('');
             const [currentVinculoId, setCurrentVinculoId] = useState('');
             
-            // Estado para gerenciar os múltiplos responsáveis
             const [responsaveis, setResponsaveis] = useState([]);
             const [novoResponsavel, setNovoResponsavel] = useState('');
 
@@ -301,13 +390,9 @@
                     }
                     setTempVinculos(initialVinculos);
                     
-                    // Lógica para carregar múltiplos responsáveis (e fallback legado)
                     let resps = [];
-                    if (Array.isArray(task.responsaveis)) {
-                        resps = [...task.responsaveis];
-                    } else if (task.responsavel) {
-                        resps = [task.responsavel];
-                    }
+                    if (Array.isArray(task.responsaveis)) resps = [...task.responsaveis];
+                    else if (task.responsavel) resps = [task.responsavel];
                     setResponsaveis(resps);
                 } else {
                     setModalData({ status: 'Pendente', prioridade: 'Média' });
@@ -321,7 +406,7 @@
 
             const addVinculo = () => {
                 if (!currentVinculoTipo || !currentVinculoId) return;
-                const option = getLinkOptions(currentVinculoTipo).find(o => o.id === currentVinculoId);
+                const option = getGlobalLinkOptions(currentVinculoTipo, db).find(o => o.id === currentVinculoId);
                 if (option) {
                     if (!tempVinculos.some(v => v.tipo === currentVinculoTipo && v.id === currentVinculoId)) {
                         setTempVinculos([...tempVinculos, { tipo: currentVinculoTipo, id: currentVinculoId, label: option.label }]);
@@ -351,12 +436,12 @@
                     id: modalData.id || `TRF-${Date.now()}`,
                     dataCriacao: modalData.dataCriacao || new Date().toISOString(),
                     vinculos: tempVinculos,
-                    responsaveis: responsaveis // Salva o array atualizado
+                    responsaveis: responsaveis
                 };
 
                 delete newTask.vinculoTipo;
                 delete newTask.vinculoId;
-                delete newTask.responsavel; // Limpa para forçar o uso do array 'responsaveis'
+                delete newTask.responsavel; 
 
                 if (modalData.id) {
                     setTarefas(tarefas.map(t => t.id === modalData.id ? newTask : t));
@@ -380,34 +465,22 @@
                 }
             };
 
-            const getLinkOptions = (tipo) => {
-                switch(tipo) {
-                    case 'Produtos': return db.produtos.filter(p=>p.SKU).map(p => ({ id: p.SKU, label: `${p.SKU} - ${p['Título']?.substring(0,30)}` }));
-                    case 'Kits': return db.kits.filter(k=>k.SKU).map(k => ({ id: k.SKU, label: `${k.SKU} - ${k['Título']?.substring(0,30)}` }));
-                    case 'CRM (Atendimentos)': return db.atendimentos.filter(a=>a.protocolo).map(a => ({ id: a.protocolo, label: `${a.protocolo} - ${a.cliente}` }));
-                    case 'Qualidade': return db.qualidade.filter(q=>q.data).map(q => ({ id: q.id, label: `NC: ${q.data} - ${q.tipo}` }));
-                    case 'Marketing': return db.marketing.filter(m=>m.data).map(m => ({ id: m.id, label: `Pauta: ${m.data} - ${m.plataforma}` }));
-                    case 'Fretes': return db.fretes.filter(f=>f.city).map(f => ({ id: f.id, label: `Frete: ${f.city} (${f.cepStart})` }));
-                    default: return [];
-                }
-            };
-
             const TaskCard = ({ task }) => {
                 const priorityColors = { 'Alta': 'border-l-red-500', 'Média': 'border-l-yellow-500', 'Baixa': 'border-l-blue-500' };
-                const bgColors = { 'Pendente': 'bg-white dark:bg-slate-800', 'Em Andamento': 'bg-blue-50 dark:bg-slate-750', 'Concluída': 'bg-gray-100 dark:bg-slate-900 opacity-60' };
+                // Correção no bg-slate-750 (inválido) para bg-slate-700
+                const bgColors = { 'Pendente': 'bg-white dark:bg-slate-800', 'Em Andamento': 'bg-blue-50 dark:bg-slate-700', 'Concluída': 'bg-gray-100 dark:bg-slate-900 opacity-60' };
                 
                 let displayVinculos = task.vinculos || [];
                 if (displayVinculos.length === 0 && task.vinculoTipo && task.vinculoId) {
                     displayVinculos = [{ tipo: task.vinculoTipo, id: task.vinculoId, label: task.vinculoId }];
                 }
 
-                // Exibição amigável dos múltiplos responsáveis
                 const displayResponsaveis = task.responsaveis && task.responsaveis.length > 0 
                     ? task.responsaveis 
                     : (task.responsavel ? [task.responsavel] : []);
 
                 return (
-                    <div className={`${bgColors[task.status]} rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 p-4 border-l-4 ${priorityColors[task.prioridade] || 'border-l-gray-400'} hover:shadow-md transition cursor-pointer relative group`} onClick={() => openTaskModal(task)}>
+                    <div className={`${bgColors[task.status]} rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 p-4 border-l-4 ${priorityColors[task.prioridade] || 'border-l-gray-400'} hover:shadow-md transition cursor-pointer relative group`} onClick={() => openTaskModal(task)}>
                         <div className="flex justify-between items-start mb-2">
                             <h4 className="font-bold text-sm text-gray-800 dark:text-white leading-tight pr-6">{task.titulo}</h4>
                             <span className="text-xs font-bold text-gray-400 whitespace-nowrap">{task.dataLimite ? new Date(task.dataLimite).toLocaleDateString() : ''}</span>
@@ -416,19 +489,19 @@
                         {displayResponsaveis.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-2">
                                 {displayResponsaveis.map((resp, idx) => (
-                                    <div key={idx} className="text-[10px] font-bold text-mercantil-blue dark:text-blue-400 bg-blue-50 dark:bg-slate-700 px-1.5 py-0.5 rounded flex items-center gap-1 border border-blue-100 dark:border-slate-600">
+                                    <div key={idx} className="text-[10px] font-bold text-mercantil-blue dark:text-blue-300 bg-blue-100/50 dark:bg-slate-800 px-1.5 py-0.5 rounded flex items-center gap-1 border border-blue-200 dark:border-slate-600">
                                         <i className="fas fa-user-circle"></i> {resp}
                                     </div>
                                 ))}
                             </div>
                         )}
 
-                        <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mb-3">{task.descricao}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 mb-3">{task.descricao}</p>
                         
                         {displayVinculos.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-3">
                                 {displayVinculos.map((v, i) => (
-                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-slate-700 rounded text-[10px] font-bold text-gray-600 dark:text-gray-300">
+                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-slate-800 rounded text-[10px] font-bold text-gray-600 dark:text-gray-300">
                                         <i className="fas fa-link"></i> {v.tipo}: {String(v.label || v.id).substring(0,18)}
                                     </span>
                                 ))}
@@ -436,9 +509,9 @@
                         )}
 
                         <div className="flex items-center gap-2 mt-auto" onClick={e => e.stopPropagation()}>
-                            {task.status !== 'Pendente' && <button onClick={()=>changeStatus(task.id, 'Pendente')} className="flex-1 py-1 text-xs font-bold rounded border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700">Pendente</button>}
-                            {task.status !== 'Em Andamento' && task.status !== 'Concluída' && <button onClick={()=>changeStatus(task.id, 'Em Andamento')} className="flex-1 py-1 text-xs font-bold rounded bg-mercantil-blue text-white hover:bg-blue-800 shadow-sm">Iniciar</button>}
-                            {task.status !== 'Concluída' && <button onClick={()=>changeStatus(task.id, 'Concluída')} className="flex-1 py-1 text-xs font-bold rounded bg-green-600 text-white hover:bg-green-700 shadow-sm"><i className="fas fa-check"></i> Concluir</button>}
+                            {task.status !== 'Pendente' && <button onClick={()=>changeStatus(task.id, 'Pendente')} className="flex-1 py-1 text-xs font-bold rounded border border-gray-300 dark:border-slate-500 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors">Pendente</button>}
+                            {task.status !== 'Em Andamento' && task.status !== 'Concluída' && <button onClick={()=>changeStatus(task.id, 'Em Andamento')} className="flex-1 py-1 text-xs font-bold rounded bg-mercantil-blue text-white hover:bg-blue-800 shadow-sm transition-colors">Iniciar</button>}
+                            {task.status !== 'Concluída' && <button onClick={()=>changeStatus(task.id, 'Concluída')} className="flex-1 py-1 text-xs font-bold rounded bg-green-600 text-white hover:bg-green-700 shadow-sm transition-colors"><i className="fas fa-check"></i> Concluir</button>}
                         </div>
                         
                         <button onClick={(e)=>{e.stopPropagation(); deleteTask(task.id);}} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><i className="fas fa-trash text-xs"></i></button>
@@ -510,7 +583,6 @@
                                         </select>
                                     </div>
                                     
-                                    {/* MÚLTIPLOS RESPONSÁVEIS */}
                                     <div className="md:col-span-1">
                                         <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Responsáveis</label>
                                         {responsaveis.length > 0 && (
@@ -584,14 +656,14 @@
                                                 <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Registro Específico</label>
                                                 <select value={currentVinculoId} onChange={(e) => setCurrentVinculoId(e.target.value)} disabled={!currentVinculoTipo} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm disabled:bg-gray-200 disabled:dark:bg-slate-700">
                                                     <option value="">{currentVinculoTipo ? 'Selecione o registro...' : 'Escolha a área primeiro'}</option>
-                                                    {currentVinculoTipo && getLinkOptions(currentVinculoTipo).map(opt => (
+                                                    {currentVinculoTipo && getGlobalLinkOptions(currentVinculoTipo, db).map(opt => (
                                                         <option key={opt.id} value={opt.id}>{opt.label}</option>
                                                     ))}
                                                 </select>
                                             </div>
                                             <div className="md:col-span-2">
                                                 <button type="button" onClick={addVinculo} disabled={!currentVinculoTipo || !currentVinculoId} className="w-full bg-mercantil-blue hover:bg-blue-800 disabled:bg-gray-400 disabled:dark:bg-slate-600 text-white p-2 rounded text-sm font-bold transition shadow-sm flex items-center justify-center">
-                                                    <i className="fas fa-plus mr-1"></i> Add
+                                                    <i className="fas fa-plus mr-1"></i> Adicionar
                                                 </button>
                                             </div>
                                         </div>
@@ -600,6 +672,217 @@
                                 <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700">
                                     <button type="button" onClick={() => setModalData(null)} className="px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium">Cancelar</button>
                                     <button type="submit" className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex items-center transition"><i className="fas fa-save mr-2"></i> Salvar Tarefa</button>
+                                </div>
+                            </form>
+                        </Modal>
+                    )}
+                </div>
+            );
+        };
+
+        // --- COMPONENTE GESTÃO DE BLOCO DE NOTAS ---
+        const NotasManager = ({ notas, setNotas, db, showToast }) => {
+            const [modalData, setModalData] = useState(null);
+            const [tempVinculos, setTempVinculos] = useState([]);
+            const [currentVinculoTipo, setCurrentVinculoTipo] = useState('');
+            const [currentVinculoId, setCurrentVinculoId] = useState('');
+
+            const openNotaModal = (nota = null) => {
+                if (nota) {
+                    setModalData(nota);
+                    setTempVinculos(nota.vinculos ? [...nota.vinculos] : []);
+                } else {
+                    setModalData({ titulo: '', conteudo: '', cor: 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-700' });
+                    setTempVinculos([]);
+                }
+                setCurrentVinculoTipo('');
+                setCurrentVinculoId('');
+            };
+
+            const addVinculo = () => {
+                if (!currentVinculoTipo || !currentVinculoId) return;
+                const option = getGlobalLinkOptions(currentVinculoTipo, db).find(o => o.id === currentVinculoId);
+                if (option) {
+                    if (!tempVinculos.some(v => v.tipo === currentVinculoTipo && v.id === currentVinculoId)) {
+                        setTempVinculos([...tempVinculos, { tipo: currentVinculoTipo, id: currentVinculoId, label: option.label }]);
+                    } else {
+                        showToast('Vínculo já adicionado a esta nota.', 'info');
+                    }
+                }
+                setCurrentVinculoId('');
+            };
+
+            const removeVinculo = (index) => setTempVinculos(tempVinculos.filter((_, i) => i !== index));
+
+            const handleSave = (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData.entries());
+                
+                const newNota = {
+                    ...data,
+                    conteudo: modalData.conteudo, // Pega o estado atualizado do editor
+                    id: modalData.id || `NOTA-${Date.now()}`,
+                    dataCriacao: modalData.dataCriacao || new Date().toISOString(),
+                    vinculos: tempVinculos
+                };
+
+                if (!newNota.titulo.trim() && !newNota.conteudo.trim()) {
+                    showToast('A nota não pode ficar totalmente vazia.', 'error');
+                    return;
+                }
+
+                if (modalData.id) {
+                    setNotas(notas.map(n => n.id === modalData.id ? newNota : n));
+                    showToast('Nota atualizada!');
+                } else {
+                    setNotas([newNota, ...notas]);
+                    showToast('Nota criada com sucesso!');
+                }
+                setModalData(null);
+            };
+
+            const deleteNota = (id) => {
+                if(window.confirm('Excluir esta nota permanentemente?')) {
+                    setNotas(notas.filter(n => n.id !== id));
+                    showToast('Nota excluída.', 'success');
+                }
+            };
+
+            const NotaCard = ({ nota }) => {
+                return (
+                    <div className={`${nota.cor || 'bg-white dark:bg-slate-800'} rounded-lg shadow-sm border p-4 hover:shadow-md transition cursor-pointer relative group flex flex-col h-full`} onClick={() => openNotaModal(nota)}>
+                        <div className="flex justify-between items-start mb-2">
+                            <h4 className="font-bold text-sm text-gray-800 dark:text-slate-100 pr-6 break-words">{nota.titulo || 'Sem Título'}</h4>
+                            <span className="text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(nota.dataCriacao).toLocaleDateString()}</span>
+                        </div>
+                        
+                        <div className="text-sm text-gray-700 dark:text-gray-300 line-clamp-4 mb-4 flex-1 rich-editor-content" dangerouslySetInnerHTML={{ __html: nota.conteudo || '' }} />
+                        
+                        {(nota.vinculos || []).length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-auto pt-2 border-t border-black/5 dark:border-white/5">
+                                {nota.vinculos.map((v, i) => (
+                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-black/5 dark:bg-white/10 rounded text-[10px] font-bold text-gray-700 dark:text-gray-300">
+                                        <i className="fas fa-link"></i> {v.tipo}: {String(v.label || v.id).substring(0,15)}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        <button onClick={(e)=>{e.stopPropagation(); deleteNota(nota.id);}} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><i className="fas fa-trash text-xs"></i></button>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="flex flex-col h-full fade-in">
+                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex justify-between items-center rounded-t-xl">
+                        <div>
+                            <h2 className="text-xl font-bold text-mercantil-dark dark:text-white flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-center text-yellow-500"><i className="fas fa-sticky-note"></i></div>
+                                Bloco de Notas
+                            </h2>
+                            <p className="text-sm text-gray-500 mt-1">Anotações rápidas com suporte a Emojis, formatação e vínculos com o ERP.</p>
+                        </div>
+                        <button onClick={() => openNotaModal()} className="bg-mercantil-blue hover:bg-blue-800 text-white px-5 py-2.5 rounded-lg font-bold transition shadow-sm flex items-center">
+                            <i className="fas fa-plus mr-2"></i> Nova Nota
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-slate-900 custom-scroll rounded-b-xl border border-t-0 border-gray-200 dark:border-slate-700">
+                        {notas.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-slate-500">
+                                <i className="fas fa-sticky-note text-6xl mb-4 opacity-50"></i>
+                                <p className="text-lg font-medium">Nenhuma nota criada.</p>
+                                <p className="text-sm">Clique em "Nova Nota" para começar.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 items-start">
+                                {notas.map(nota => <NotaCard key={nota.id} nota={nota} />)}
+                            </div>
+                        )}
+                    </div>
+
+                    {modalData && (
+                        <Modal title={modalData.id ? 'Editar Nota' : 'Nova Nota'} onClose={() => setModalData(null)}>
+                            <form id="notaForm" onSubmit={handleSave} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Título</label>
+                                    <input type="text" name="titulo" defaultValue={modalData.titulo} className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white font-bold" placeholder="Assunto da nota..." />
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Conteúdo</label>
+                                    <RichTextEditor 
+                                        value={modalData.conteudo} 
+                                        onChange={(val) => setModalData({...modalData, conteudo: val})} 
+                                        placeholder="Escreva suas anotações aqui..." 
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-2">Cor da Nota</label>
+                                    <div className="flex gap-3">
+                                        {[
+                                            { value: 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600', color: 'bg-gray-100' },
+                                            { value: 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-700', color: 'bg-yellow-300' },
+                                            { value: 'bg-blue-100 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700', color: 'bg-blue-300' },
+                                            { value: 'bg-green-100 dark:bg-green-900/30 border-green-200 dark:border-green-700', color: 'bg-green-300' },
+                                            { value: 'bg-pink-100 dark:bg-pink-900/30 border-pink-200 dark:border-pink-700', color: 'bg-pink-300' }
+                                        ].map(c => (
+                                            <label key={c.value} className="cursor-pointer relative">
+                                                <input type="radio" name="cor" value={c.value} defaultChecked={modalData.cor === c.value || (!modalData.cor && c.value.includes('yellow'))} className="sr-only peer" />
+                                                <div className={`w-8 h-8 rounded-full border-2 border-transparent peer-checked:border-gray-800 dark:peer-checked:border-white ${c.color} shadow-sm transition`}></div>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                                
+                                <div className="border-t border-gray-200 dark:border-slate-700 pt-5 mt-2">
+                                    <h4 className="text-sm font-bold text-mercantil-blue dark:text-blue-400 mb-3"><i className="fas fa-link mr-2"></i>Vincular Registros (Opcional)</h4>
+                                    
+                                    {tempVinculos.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mb-4 p-3 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700">
+                                            {tempVinculos.map((v, i) => (
+                                                <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded text-xs font-bold text-gray-700 dark:text-gray-200 shadow-sm">
+                                                    <span className="text-mercantil-blue dark:text-blue-400">{v.tipo}:</span> {v.label}
+                                                    <button type="button" onClick={() => removeVinculo(i)} className="ml-1 text-red-500 hover:text-red-700 focus:outline-none transition-colors" title="Remover Vínculo"><i className="fas fa-times-circle"></i></button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50 dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-slate-700">
+                                        <div className="md:col-span-4">
+                                            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Módulo / Área</label>
+                                            <select value={currentVinculoTipo} onChange={(e) => { setCurrentVinculoTipo(e.target.value); setCurrentVinculoId(''); }} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm">
+                                                <option value="">Selecione uma área...</option>
+                                                <option value="Produtos">Produtos / Peças</option>
+                                                <option value="Kits">Kits</option>
+                                                <option value="CRM (Atendimentos)">CRM (Atendimentos)</option>
+                                                <option value="Qualidade">Qualidade (NCs)</option>
+                                                <option value="Marketing">Marketing</option>
+                                                <option value="Fretes">Fretes</option>
+                                            </select>
+                                        </div>
+                                        <div className="md:col-span-6">
+                                            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Registro Específico</label>
+                                            <select value={currentVinculoId} onChange={(e) => setCurrentVinculoId(e.target.value)} disabled={!currentVinculoTipo} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm disabled:bg-gray-200 disabled:dark:bg-slate-700">
+                                                <option value="">{currentVinculoTipo ? 'Selecione o registro...' : 'Escolha a área primeiro'}</option>
+                                                {currentVinculoTipo && getGlobalLinkOptions(currentVinculoTipo, db).map(opt => (
+                                                    <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <button type="button" onClick={addVinculo} disabled={!currentVinculoTipo || !currentVinculoId} className="w-full bg-mercantil-blue hover:bg-blue-800 disabled:bg-gray-400 disabled:dark:bg-slate-600 text-white p-2 rounded text-sm font-bold transition shadow-sm flex items-center justify-center">
+                                                <i className="fas fa-plus mr-1"></i> Adicionar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700">
+                                    <button type="button" onClick={() => setModalData(null)} className="px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium">Cancelar</button>
+                                    <button type="submit" className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex items-center transition"><i className="fas fa-save mr-2"></i> Salvar Nota</button>
                                 </div>
                             </form>
                         </Modal>
@@ -645,11 +928,11 @@
             };
 
             return (
-                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col h-full fade-in">
-                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col lg:flex-row justify-between items-center gap-4 rounded-t-xl">
+                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col h-full fade-in w-full overflow-hidden">
+                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col lg:flex-row justify-between items-center gap-4 rounded-t-xl w-full">
                         <h2 className="text-xl font-bold text-mercantil-dark dark:text-white flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-center text-mercantil-blue"><i className={icon}></i></div>
-                            {title}
+                            <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-center text-mercantil-blue shrink-0"><i className={icon}></i></div>
+                            <span className="truncate">{title}</span>
                         </h2>
                         <div className="flex flex-col sm:flex-row w-full lg:w-auto gap-3">
                             <div className="relative w-full sm:w-64">
@@ -664,12 +947,12 @@
                             </button>
                         </div>
                     </div>
-                    <div className="overflow-x-auto flex-1 p-0">
+                    <div className="w-full overflow-x-auto custom-scroll flex-1 p-0">
                         <table className="w-full text-sm text-left dark:text-slate-300">
                             <thead className="text-xs text-gray-600 dark:text-gray-400 uppercase bg-gray-100 dark:bg-slate-700">
                                 <tr>
-                                    {columns.map(c => <th key={c.field} className="px-4 py-3">{c.header}</th>)}
-                                    <th className="px-4 py-3 text-right">Ações</th>
+                                    {columns.map(c => <th key={c.field} className="px-4 py-3 whitespace-nowrap">{c.header}</th>)}
+                                    <th className="px-4 py-3 text-right whitespace-nowrap">Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -830,7 +1113,7 @@
 
             return (
                 <div className="flex flex-col h-full fade-in space-y-6">
-                    <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-wrap gap-2">
+                    <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-wrap gap-2 w-full">
                         <button onClick={() => setTab('consulta')} className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${tab === 'consulta' ? 'bg-mercantil-blue text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600'}`}>
                             <i className="fas fa-search mr-2"></i> Consulta Cotação
                         </button>
@@ -840,7 +1123,7 @@
                     </div>
 
                     {tab === 'consulta' && (
-                        <div className="space-y-6 fade-in">
+                        <div className="space-y-6 fade-in w-full">
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700">
                                 <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-6 flex items-center gap-2">
                                     <i className="fas fa-truck text-mercantil-orange"></i> Buscar Cotação de Frete
@@ -870,17 +1153,17 @@
                             </div>
 
                             {searched && (
-                                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden fade-in">
+                                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden fade-in w-full">
                                     <div className="bg-gray-50 dark:bg-slate-900 px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center">
                                         <h3 className="font-bold text-gray-800 dark:text-white">Resultados da Pesquisa</h3>
                                         <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{results.length} resultado(s)</span>
                                     </div>
                                     <div className="divide-y divide-gray-100 dark:divide-slate-700">
                                         {results.length === 0 ? (
-                                            <div className="p-8 text-center text-gray-500 dark:text-gray-400 flex flex-col items-center">
-                                                <i className="fas fa-exclamation-circle text-4xl text-gray-300 dark:text-slate-600 mb-3"></i>
-                                                <p className="text-lg font-bold">Nenhum frete encontrado.</p>
-                                                <p className="text-sm mt-1">Verifique o CEP digitado ou limites de peso.</p>
+                                            <div className="p-8 text-center text-red-600 dark:text-red-500 flex flex-col items-center">
+                                                <i className="fas fa-times-circle text-5xl mb-3 drop-shadow-md"></i>
+                                                <p className="text-xl font-bold">Fora da faixa de entrega</p>
+                                                <p className="text-sm mt-1 text-gray-500 dark:text-gray-400">Verifique o CEP digitado ou os limites de peso.</p>
                                             </div>
                                         ) : (
                                             results.map(result => (
@@ -904,7 +1187,7 @@
                     )}
 
                     {tab === 'gestao' && (
-                        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col flex-1 min-h-[500px] fade-in overflow-hidden">
+                        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col flex-1 min-h-[500px] fade-in overflow-hidden w-full">
                             <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col sm:flex-row justify-between items-center gap-4">
                                 <div>
                                     <h2 className="text-lg font-bold text-gray-800 dark:text-white">Editor da Base de Dados</h2>
@@ -920,7 +1203,7 @@
                                     </button>
                                 </div>
                             </div>
-                            <div className="flex-1 overflow-auto custom-scroll p-0">
+                            <div className="w-full overflow-x-auto custom-scroll p-0 flex-1">
                                 <table className="w-full min-w-[800px] text-left border-collapse dark:text-slate-300">
                                     <thead className="bg-gray-100 dark:bg-slate-700 sticky top-0 z-10 shadow-sm text-gray-600 dark:text-gray-300">
                                         <tr>
@@ -975,7 +1258,8 @@
             };
 
             const [darkMode, setDarkMode] = useLocalStorage('mrc_theme_dark', false);
-            const [activeMenu, setActiveMenu] = useState('dashboard');
+            const [activeMenu, setActiveMenu] = useState('painel');
+            const [isSidebarOpen, setIsSidebarOpen] = useState(false);
             
             const [produtos, setProdutos] = useLocalStorage('mrc_produtos', []);
             const [kits, setKits] = useLocalStorage('mrc_kits', []);
@@ -986,6 +1270,7 @@
             const [compliance, setCompliance] = useLocalStorage('mrc_compliance', []);
             const [fretes, setFretes] = useLocalStorage('mrc_fretes', []);
             const [tarefas, setTarefas] = useLocalStorage('mrc_tarefas', []);
+            const [notas, setNotas] = useLocalStorage('mrc_notas', []);
             const [lastBackup, setLastBackup] = useLocalStorage('mrc_last_backup_time', null);
 
             useEffect(() => {
@@ -995,7 +1280,7 @@
 
             useEffect(() => {
                 const forceSystemBackup = () => {
-                    const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas };
+                    const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas, notas };
                     localStorage.setItem('mrc_auto_backup_dump', JSON.stringify(fullSystemDump));
                     setLastBackup(new Date().toISOString());
                 };
@@ -1004,11 +1289,11 @@
                     else {
                         const lastTime = new Date(lastBackup).getTime();
                         const nowTime = new Date().getTime();
-                        if ((nowTime - lastTime) >= 10800000) forceSystemBackup(); // 3 horas
+                        if ((nowTime - lastTime) >= 1800000) forceSystemBackup(); // 30 minutos
                     }
                 }, 60000);
                 return () => clearInterval(intervalId);
-            }, [produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas, lastBackup, setLastBackup]);
+            }, [produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas, notas, lastBackup, setLastBackup]);
 
             const saveStateRecord = (data, stateArray, setter) => {
                 const arr = [...(stateArray || [])];
@@ -1100,7 +1385,6 @@
                 { name: 'pedido', label: 'Número do Pedido (Marketplace/Site)', type: 'text', half: true, placeholder: 'Ex: PED-12345678' },
                 { name: 'motivo', label: 'Motivo / Assunto', type: 'select', options: ['Dúvida Técnica (Motor/Peças)', 'Cotação de Peças Linha Leve/Diesel', 'Atraso na Entrega', 'Garantia / Defeito / Troca', 'Reclamação de Atendimento', 'Elogio / Sugestão'], half: true },
                 
-                // --- NOVO CAMPO: VÍNCULOS COMERCIAIS (Múltiplos Produtos/Kits com Qtd) ---
                 { name: 'itensVinculados', label: 'Produtos e Kits Vinculados ao Atendimento', type: 'vinculos_comerciais', full: true, produtos: produtoOptions, kits: kitOptions },
                 
                 { name: 'regiaoVinculada', label: 'Região / Frete Relacionado', type: 'select', options: freteOptions, half: true },
@@ -1218,10 +1502,10 @@
                             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 p-6">
                                 <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4 border-b dark:border-slate-700 pb-2"><i className="fas fa-bolt text-mercantil-orange mr-2"></i>Atalhos Rápidos</h3>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <button onClick={() => setActiveMenu('fretes')} className="p-4 border dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-left transition flex flex-col items-center justify-center text-mercantil-blue dark:text-blue-400 font-bold">
+                                    <button onClick={() => { setActiveMenu('fretes'); setIsSidebarOpen(false); }} className="p-4 border dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-left transition flex flex-col items-center justify-center text-mercantil-blue dark:text-blue-400 font-bold">
                                         <i className="fas fa-truck text-3xl mb-2"></i> Calcular Frete
                                     </button>
-                                    <button onClick={() => setActiveMenu('tarefas')} className="p-4 border dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-left transition flex flex-col items-center justify-center text-mercantil-orange dark:text-orange-400 font-bold">
+                                    <button onClick={() => { setActiveMenu('tarefas'); setIsSidebarOpen(false); }} className="p-4 border dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-left transition flex flex-col items-center justify-center text-mercantil-orange dark:text-orange-400 font-bold">
                                         <i className="fas fa-tasks text-3xl mb-2"></i> Ver Tarefas
                                     </button>
                                 </div>
@@ -1233,7 +1517,7 @@
                                     <li className="flex justify-between items-center"><span>Status do Banco Local</span><span className="text-green-600 dark:text-green-400 font-bold"><i className="fas fa-check"></i> Seguro e Operante</span></li>
                                     <li className="flex justify-between items-center p-2 bg-gray-50 dark:bg-slate-900 rounded border dark:border-slate-700 mt-2">
                                         <span className="text-mercantil-orange font-bold"><i className="fas fa-cloud-upload-alt mr-2"></i>Último Backup 100%:</span>
-                                        <span className="font-mono text-xs">{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nenhum'}</span>
+                                        <span className="font-mono text-xs">{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nenhum backup gerado'}</span>
                                     </li>
                                 </ul>
                             </div>
@@ -1244,7 +1528,7 @@
 
             const ImportExport = () => {
                 const forceBackupNow = () => {
-                    const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas };
+                    const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas, notas };
                     localStorage.setItem('mrc_auto_backup_dump', JSON.stringify(fullSystemDump));
                     setLastBackup(new Date().toISOString());
                     showToast('Backup manual gravado com sucesso no navegador.', 'success');
@@ -1271,7 +1555,7 @@
                         try {
                             const data = JSON.parse(evt.target.result);
                             
-                            if (data.produtos || data.kits || data.fretes || data.atendimentos || data.tarefas) {
+                            if (data.produtos || data.kits || data.fretes || data.atendimentos || data.tarefas || data.notas) {
                                 if (window.confirm("ATENÇÃO CRÍTICA: Restaurar um backup irá APAGAR E SUBSTITUIR todos os dados atuais do sistema pelo conteúdo deste arquivo. Tem certeza absoluta?")) {
                                     if(data.produtos) setProdutos(data.produtos);
                                     if(data.kits) setKits(data.kits);
@@ -1282,6 +1566,7 @@
                                     if(data.compliance) setCompliance(data.compliance);
                                     if(data.fretes) setFretes(data.fretes);
                                     if(data.tarefas) setTarefas(data.tarefas);
+                                    if(data.notas) setNotas(data.notas);
                                     
                                     showToast("Sistema restaurado com sucesso! Dados sincronizados.", "success");
                                 }
@@ -1333,7 +1618,7 @@
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700">
                                 <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2"><i className="fas fa-shield-check text-green-500 mr-2"></i>Gerenciar Backups</h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">O sistema salva os dados automaticamente a cada 3 horas. Exporte o arquivo JSON para segurança extrema.</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">O sistema salva os dados automaticamente a cada 30 minutos. Exporte o arquivo JSON para segurança extrema.</p>
                                 
                                 <div className="p-4 bg-gray-50 dark:bg-slate-900 border dark:border-slate-700 rounded-lg mb-6 flex flex-col gap-2">
                                     <div className="text-sm dark:text-slate-300"><strong>Último Backup Automático:</strong></div>
@@ -1341,7 +1626,7 @@
                                 </div>
 
                                 <div className="flex gap-3 mb-4">
-                                    <button onClick={forceBackupNow} className="flex-1 bg-mercantil-dark text-white p-3 rounded-lg hover:bg-black font-bold shadow transition"><i className="fas fa-save mr-2"></i> Forçar Backup Local</button>
+                                    <button onClick={forceBackupNow} className="flex-1 bg-mercantil-dark text-white p-3 rounded-lg hover:bg-black font-bold shadow transition"><i className="fas fa-save mr-2"></i> Forçar Backup</button>
                                     <button onClick={downloadBackup} className="flex-1 bg-green-600 text-white p-3 rounded-lg hover:bg-green-800 font-bold shadow transition"><i className="fas fa-file-download mr-2"></i> Baixar JSON Base</button>
                                 </div>
 
@@ -1372,7 +1657,7 @@
             const MenuItem = ({ id, icon, label, badge }) => {
                 const isActive = activeMenu === id;
                 return (
-                    <button onClick={() => setActiveMenu(id)} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${isActive ? 'bg-blue-50 dark:bg-slate-800 text-mercantil-blue dark:text-blue-400 border-l-4 border-mercantil-orange font-bold' : 'text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white border-l-4 border-transparent font-medium'}`}>
+                    <button onClick={() => { setActiveMenu(id); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${isActive ? 'bg-blue-50 dark:bg-slate-800 text-mercantil-blue dark:text-blue-400 border-l-4 border-mercantil-orange font-bold' : 'text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white border-l-4 border-transparent font-medium'}`}>
                         <div className="flex items-center gap-3">
                             <i className={`${icon} w-5 text-center text-lg ${isActive ? 'text-mercantil-orange' : ''}`}></i>
                             <span className="text-sm">{label}</span>
@@ -1385,7 +1670,7 @@
             };
 
             return (
-                <div className="flex h-screen overflow-hidden dark:bg-slate-900 font-sans text-gray-800 dark:text-slate-200">
+                <div className="flex h-screen overflow-hidden dark:bg-slate-900 font-sans text-gray-800 dark:text-slate-200 w-full">
                     {toast.visible && (
                         <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-xl text-white font-bold fade-in flex items-center gap-3 ${toast.type==='success'?'bg-green-600':toast.type==='info'?'bg-blue-600':'bg-red-600'}`}>
                             <i className={`fas ${toast.type==='success'?'fa-check-circle':toast.type==='info'?'fa-info-circle':'fa-exclamation-triangle'} text-xl`}></i>
@@ -1393,19 +1678,29 @@
                         </div>
                     )}
 
-                    <aside className="w-64 bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 shadow-sm flex flex-col hidden md:flex">
-                        <div className="p-6 border-b border-gray-200 dark:border-slate-700 flex items-center justify-center gap-3">
-                            <div className="bg-mercantil-dark text-white w-10 h-10 rounded-lg flex items-center justify-center text-xl shadow-md"><i className="fas fa-cogs"></i></div>
+                    {/* Fundo escuro ao abrir o menu mobile */}
+                    {isSidebarOpen && (
+                        <div 
+                            className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden" 
+                            onClick={() => setIsSidebarOpen(false)}
+                        ></div>
+                    )}
+
+                    {/* Barra Lateral Responsiva */}
+                    <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 shadow-xl md:shadow-none transform transition-transform duration-300 ease-in-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
+                        <div className="p-6 border-b border-gray-200 dark:border-slate-700 flex items-center gap-3">
+                            <LogoMercantil />
                             <div>
                                 <h1 className="font-extrabold text-mercantil-blue dark:text-blue-400 tracking-tight leading-none text-xl">MERCANTIL</h1>
                                 <span className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest font-bold">Distribuidora ERP</span>
                             </div>
                         </div>
-                        <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scroll">
-                            <MenuItem id="dashboard" icon="fas fa-chart-pie" label="Dashboard Geral" />
+                        <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scroll w-full">
+                            <MenuItem id="painel" icon="fas fa-chart-pie" label="Painel Geral" />
                             
                             <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Produtividade</p></div>
                             <MenuItem id="tarefas" icon="fas fa-check-square" label="Tarefas (Kanban)" badge={tarefasPendentes} />
+                            <MenuItem id="notas" icon="fas fa-sticky-note" label="Bloco de Notas" />
 
                             <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Comercial</p></div>
                             <MenuItem id="produtos" icon="fas fa-box" label="Peças & Motores" badge={produtosPendentes} />
@@ -1425,29 +1720,27 @@
                             <MenuItem id="dados" icon="fas fa-database" label="Dados & Backup" />
                         </nav>
                         <div className="p-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-center text-xs text-gray-500 font-medium">
-                            Versão 3.1 (Kanban+ & CRM-Vínculos)
+                            Versão 3.2 (Kanban+ Notas Integradas)
                         </div>
                     </aside>
 
-                    <div className="md:hidden fixed top-0 left-0 right-0 bg-white dark:bg-slate-800 border-b dark:border-slate-700 z-40 p-4 flex justify-between items-center shadow-sm">
-                        <div className="font-extrabold text-mercantil-blue dark:text-blue-400 text-lg flex items-center gap-2"><i className="fas fa-cogs"></i> MERCANTIL</div>
-                        <select className="bg-gray-100 dark:bg-slate-700 border-none rounded p-2 text-sm font-bold focus:ring-0 outline-none w-48 text-ellipsis" value={activeMenu} onChange={e => setActiveMenu(e.target.value)}>
-                            <option value="dashboard">Dashboard</option>
-                            <option value="tarefas">Tarefas ({tarefasPendentes})</option>
-                            <option value="produtos">Peças ({produtosPendentes} falhas)</option>
-                            <option value="kits">Kits ({kitsPendentes} falhas)</option>
-                            <option value="fretes">Gestão de Fretes ({fretesPendentes} falhas)</option>
-                            <option value="crm">CRM Atendimento ({atendimentosPendentes} abertos)</option>
-                            <option value="qualidade">Qualidade ({qualidadePendentes} pendentes)</option>
-                            <option value="marketing">Marketing</option>
-                            <option value="gerencia">Gerência</option>
-                            <option value="compliance">Compliance</option>
-                            <option value="dados">Backup / Arquivos</option>
-                        </select>
+                    {/* Cabeçalho Mobile */}
+                    <div className="md:hidden fixed top-0 left-0 right-0 bg-white dark:bg-slate-800 border-b dark:border-slate-700 z-30 p-4 flex justify-between items-center shadow-sm w-full">
+                        <div className="flex items-center gap-3">
+                            <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600 dark:text-gray-300 focus:outline-none p-1">
+                                <i className="fas fa-bars text-2xl"></i>
+                            </button>
+                            <div className="font-extrabold text-mercantil-blue dark:text-blue-400 text-lg flex items-center gap-2">
+                                <LogoMercantil /> MERCANTIL
+                            </div>
+                        </div>
+                        <button onClick={() => setDarkMode(!darkMode)} className="text-xl p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 transition" title="Alternar Tema">
+                            <i className={`fas ${darkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-slate-600'}`}></i>
+                        </button>
                     </div>
 
-                    <main className="flex-1 flex flex-col h-full overflow-hidden mt-16 md:mt-0 relative">
-                        <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 p-4 sm:px-8 hidden md:flex justify-between items-center shadow-sm z-10">
+                    <main className="flex-1 flex flex-col h-full overflow-hidden mt-[72px] md:mt-0 relative w-full">
+                        <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 p-4 sm:px-8 hidden md:flex justify-between items-center shadow-sm z-10 w-full">
                             <h2 className="text-2xl font-bold text-gray-800 dark:text-white capitalize flex items-center gap-2">
                                 {activeMenu === 'dados' ? 'Segurança e Dados' : activeMenu.replace('-', ' ')}
                             </h2>
@@ -1456,18 +1749,25 @@
                                     <i className={`fas ${darkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-slate-600'}`}></i>
                                 </button>
                                 <a href="https://mercantilpecas.com.br/" target="_blank" rel="noreferrer" className="text-sm text-gray-500 dark:text-gray-300 hover:text-mercantil-orange transition font-bold"><i className="fas fa-globe mr-1"></i> Site Oficial</a>
-                                <div className="h-9 w-9 rounded-full bg-mercantil-blue text-white flex items-center justify-center font-bold shadow-md cursor-pointer border-2 border-white dark:border-slate-600">
+                                <div className="h-9 w-9 rounded-full bg-mercantil-blue text-white flex items-center justify-center font-bold shadow-md cursor-pointer border-2 border-white dark:border-slate-600 shrink-0">
                                     <i className="fas fa-user-tie"></i>
                                 </div>
                             </div>
                         </header>
 
-                        <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scroll">
-                            {activeMenu === 'dashboard' && <Dashboard />}
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scroll w-full">
+                            {activeMenu === 'painel' && <Dashboard />}
                             
                             {activeMenu === 'tarefas' && (
                                 <TarefasManager 
                                     tarefas={tarefas} setTarefas={setTarefas} showToast={showToast} 
+                                    db={{ produtos, kits, atendimentos, qualidade, fretes, marketing }} 
+                                />
+                            )}
+                            
+                            {activeMenu === 'notas' && (
+                                <NotasManager 
+                                    notas={notas} setNotas={setNotas} showToast={showToast} 
                                     db={{ produtos, kits, atendimentos, qualidade, fretes, marketing }} 
                                 />
                             )}
