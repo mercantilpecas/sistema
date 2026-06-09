@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mercantil ERP - Gestão Integrada (Cloud)</title>
+    <title>Mercantil ERP - Gestão Integrada</title>
     
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -14,28 +15,27 @@
                 extend: {
                     fontFamily: { sans: ['Inter', 'sans-serif'] },
                     colors: {
-                        mercantil: { blue: '#1E3A8A', light: '#3B82F6', orange: '#EA580C', dark: '#0F172A', gray: '#F8FAFC' }
+                        mercantil: {
+                            blue: '#1E3A8A', 
+                            light: '#3B82F6',
+                            orange: '#EA580C',
+                            dark: '#0F172A',
+                            gray: '#F8FAFC'
+                        }
                     }
                 }
             }
         }
     </script>
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Biblioteca SheetJS (XLSX) para importação/exportação de planilhas e CSVs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
-    <!-- Importação do Firebase (Cloud Database) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Deixa a API do Firebase disponível globalmente para o React usar
-        window.FirebaseAPI = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc };
-        window.dispatchEvent(new Event('firebase-loaded'));
-    </script>
 
     <style>
         body { background-color: inherit; }
@@ -47,135 +47,259 @@
         .dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .table-input { width: 100%; padding: 4px 8px; font-size: 0.875rem; background-color: transparent; border-bottom: 1px solid transparent; transition: all 0.2s; }
-        .table-input:focus { border-bottom-color: #3b82f6; outline: none; }
+        
+        .table-input {
+            width: 100%;
+            padding: 4px 8px;
+            font-size: 0.875rem;
+            background-color: transparent;
+            border-bottom: 1px solid transparent;
+            transition: all 0.2s;
+        }
+        .table-input:focus {
+            border-bottom-color: #3b82f6;
+            outline: none;
+        }
         .custom-scroll { overflow-y: auto; }
+        
+        /* Estilos do Editor de Texto Rico */
         .rich-editor-content ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 0.5rem; }
         .rich-editor-content ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 0.5rem; }
         .rich-editor-content a { color: #3b82f6; text-decoration: underline; }
-        .loader { border-top-color: #EA580C; -webkit-animation: spinner 1.5s linear infinite; animation: spinner 1.5s linear infinite; }
-        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 transition-colors duration-200">
+    
     <div id="root">
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Inter', sans-serif; color: #475569;">
             <i class="fas fa-circle-notch fa-spin" style="font-size: 3rem; color: #1E3A8A; margin-bottom: 20px;"></i>
-            <h2 style="margin: 0; font-size: 1.5rem; font-weight: 700;">Iniciando Mercantil ERP (Cloud)...</h2>
-            <p style="margin-top: 10px; font-size: 0.9rem;">Conectando ao banco de dados em tempo real.</p>
+            <h2 style="margin: 0; font-size: 1.5rem; font-weight: 700;">Iniciando Mercantil ERP...</h2>
+            <p style="margin-top: 10px; font-size: 0.9rem;">Carregando módulos de sistema e banco de dados local.</p>
         </div>
     </div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- HOOK CUSTOMIZADO PARA LOCALSTORAGE ---
+        const useLocalStorage = (key, initialValue) => {
+            const [storedValue, setStoredValue] = useState(() => {
+                try {
+                    const item = window.localStorage.getItem(key);
+                    if (!item || item === 'null' || item === 'undefined') return initialValue;
+                    const parsed = JSON.parse(item);
+                    
+                    if (Array.isArray(parsed)) {
+                        let isCorrupted = false;
+                        parsed.forEach((obj, idx) => {
+                            if (obj && typeof obj === 'object' && !obj.id) {
+                                obj.id = `FIX-${Date.now()}-${Math.random().toString(36).substr(2, 5)}-${idx}`;
+                                isCorrupted = true;
+                            }
+                        });
+                        if (isCorrupted) window.localStorage.setItem(key, JSON.stringify(parsed));
+                    }
+
+                    if (Array.isArray(initialValue) && !Array.isArray(parsed)) {
+                        return initialValue;
+                    }
+                    
+                    return parsed !== null ? parsed : initialValue;
+                } catch (error) {
+                    console.error("Erro ao ler LocalStorage", error);
+                    return initialValue;
+                }
+            });
+
+            const setValue = (value) => {
+                try {
+                    const valueToStore = value instanceof Function ? value(storedValue) : value;
+                    setStoredValue(valueToStore);
+                    window.localStorage.setItem(key, JSON.stringify(valueToStore));
+                } catch (error) {
+                    console.error("Erro ao salvar no localStorage", error);
+                }
+            };
+            return [storedValue, setValue];
+        };
 
         // --- UTILS ---
         const copyToClipboard = (text, showToast) => {
-            try {
-                const textarea = document.createElement('textarea');
-                textarea.value = text;
-                document.body.appendChild(textarea);
-                textarea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textarea);
-                showToast(`Copiado: ${text}`, 'success');
-            } catch (err) {
-                showToast('Erro ao copiar', 'error');
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => showToast(`Copiado: ${text}`, 'success')).catch(() => showToast('Erro ao copiar', 'error'));
+            } else {
+                try {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    showToast(`Copiado: ${text}`, 'success');
+                } catch (err) {
+                    showToast('Erro ao copiar', 'error');
+                }
             }
         };
 
-        // --- HOOK CUSTOMIZADO PARA SINCRONIZAÇÃO COM FIREBASE FIRESTORE ---
-        const useFirestoreSync = (db, user, collectionName) => {
-            const [data, setData] = useState([]);
-            const [loading, setLoading] = useState(true);
-
-            useEffect(() => {
-                if (!db || !user) return;
-
-                // Configuração para funcionar tanto no ambiente de teste quanto no seu GitHub
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'mercantil-erp-cloud';
-                // Caminho da coleção adaptado
-                const colPath = typeof __firebase_config !== 'undefined' 
-                    ? `artifacts/${appId}/public/data/${collectionName}` 
-                    : `empresas/mercantil/${collectionName}`; // Este será o caminho no seu Firebase oficial
-
-                const colRef = window.FirebaseAPI.collection(db, colPath);
-                
-                // onSnapshot fica "escutando" mudanças em tempo real!
-                const unsubscribe = window.FirebaseAPI.onSnapshot(colRef, (snapshot) => {
-                    const items = [];
-                    snapshot.forEach((doc) => items.push({ id: doc.id, ...doc.data() }));
-                    // Ordena por data de criação (se existir) para manter a consistência
-                    items.sort((a, b) => {
-                        if (a.dataCriacao && b.dataCriacao) return new Date(b.dataCriacao) - new Date(a.dataCriacao);
-                        return 0;
-                    });
-                    setData(items);
-                    setLoading(false);
-                }, (error) => {
-                    console.error("Erro no Firestore:", error);
-                    setLoading(false);
-                });
-
-                return () => unsubscribe();
-            }, [db, user, collectionName]);
-
-            const saveItem = async (itemData) => {
-                if (!db || !user) return;
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'mercantil-erp-cloud';
-                const colPath = typeof __firebase_config !== 'undefined' 
-                    ? `artifacts/${appId}/public/data/${collectionName}` 
-                    : `empresas/mercantil/${collectionName}`;
-                
-                const itemId = itemData.id || `ID-${Date.now()}-${Math.random().toString(36).substr(2,5)}`;
-                const itemToSave = { ...itemData, id: itemId };
-                if (!itemToSave.dataCriacao) itemToSave.dataCriacao = new Date().toISOString();
-
-                const docRef = window.FirebaseAPI.doc(db, colPath, itemId);
-                await window.FirebaseAPI.setDoc(docRef, itemToSave); // Salva na nuvem
-            };
-
-            const deleteItem = async (itemId) => {
-                if (!db || !user) return;
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'mercantil-erp-cloud';
-                const colPath = typeof __firebase_config !== 'undefined' 
-                    ? `artifacts/${appId}/public/data/${collectionName}` 
-                    : `empresas/mercantil/${collectionName}`;
-                    
-                const docRef = window.FirebaseAPI.doc(db, colPath, itemId);
-                await window.FirebaseAPI.deleteDoc(docRef); // Apaga na nuvem
-            };
-
-            const saveMultiple = async (itemsArray) => {
-                 if (!db || !user) return;
-                 for (const item of itemsArray) {
-                     await saveItem(item);
-                 }
-            }
-
-            return [data, saveItem, deleteItem, saveMultiple, loading];
-        };
-
-        // --- COMPONENTES COMPARTILHADOS (Minimizados para focar na lógica) ---
+        // --- COMPONENTE: LOGO MERCANTIL ---
         const LogoMercantil = () => (
             <div className="relative flex items-center justify-center w-10 h-10 shrink-0">
-                <img src="https://raw.githubusercontent.com/mercantil/logo/main/2.png" alt="Logo" className="w-10 h-10 rounded-full object-cover shadow-sm z-10 border-2 border-transparent" onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex'; }} />
-                <div style={{ display: 'none' }} className="absolute inset-0 rounded-full bg-white text-mercantil-orange items-center justify-center font-bold text-xl shadow-md border-2 border-mercantil-orange z-0">M</div>
+                <img 
+                    src="https://raw.githubusercontent.com/mercantil/logo/main/2.png" 
+                    alt="Mercantil Logo" 
+                    className="w-10 h-10 rounded-full object-cover shadow-sm z-10 border-2 border-transparent"
+                    onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextElementSibling.style.display = 'flex';
+                    }}
+                />
+                <div style={{ display: 'none' }} className="absolute inset-0 rounded-full bg-white text-mercantil-orange items-center justify-center font-bold text-xl shadow-md border-2 border-mercantil-orange z-0">
+                    M
+                </div>
             </div>
         );
 
-        const Modal = ({ title, children, onClose, onSave }) => (
+        // --- COMPONENTE: EDITOR DE TEXTO RICO (BLOCO DE NOTAS) ---
+        const RichTextEditor = ({ value, onChange, placeholder }) => {
+            const editorRef = useRef(null);
+            
+            useEffect(() => {
+                if (editorRef.current && value !== editorRef.current.innerHTML && document.activeElement !== editorRef.current) {
+                    editorRef.current.innerHTML = value || '';
+                }
+            }, [value]);
+
+            const handleInput = () => {
+                if (editorRef.current) {
+                    onChange(editorRef.current.innerHTML);
+                }
+            };
+
+            const execCmd = (cmd, arg = null) => {
+                document.execCommand(cmd, false, arg);
+                if (editorRef.current) editorRef.current.focus();
+                handleInput();
+            };
+
+            const insertEmoji = (emoji) => {
+                execCmd('insertText', emoji);
+            };
+
+            return (
+                <div className="border border-gray-300 dark:border-slate-600 rounded-lg overflow-hidden flex flex-col bg-white dark:bg-slate-900 focus-within:ring-2 focus-within:ring-mercantil-blue transition-all">
+                    <div className="bg-gray-100 dark:bg-slate-800 border-b border-gray-300 dark:border-slate-600 p-2 flex gap-1 flex-wrap items-center">
+                        <button type="button" onClick={() => execCmd('bold')} className="p-1.5 px-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition"><i className="fas fa-bold"></i></button>
+                        <button type="button" onClick={() => execCmd('italic')} className="p-1.5 px-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition"><i className="fas fa-italic"></i></button>
+                        <button type="button" onClick={() => execCmd('underline')} className="p-1.5 px-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition"><i className="fas fa-underline"></i></button>
+                        <div className="w-px h-5 bg-gray-300 dark:bg-slate-600 mx-1"></div>
+                        <button type="button" onClick={() => execCmd('insertUnorderedList')} className="p-1.5 px-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition" title="Lista"><i className="fas fa-list-ul"></i></button>
+                        <button type="button" onClick={() => execCmd('insertOrderedList')} className="p-1.5 px-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition" title="Lista Numerada"><i className="fas fa-list-ol"></i></button>
+                        <div className="w-px h-5 bg-gray-300 dark:bg-slate-600 mx-1"></div>
+                        <div className="flex gap-1 items-center">
+                            {['😀', '👍', '⚠️', '🔥', '✅', '💡', '📌', '📦'].map(e => (
+                                <button type="button" key={e} onClick={() => insertEmoji(e)} className="p-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded text-base transition">{e}</button>
+                            ))}
+                        </div>
+                    </div>
+                    <div 
+                        ref={editorRef}
+                        contentEditable 
+                        onInput={handleInput}
+                        onBlur={handleInput}
+                        data-placeholder={placeholder}
+                        className="p-4 min-h-[150px] outline-none text-sm text-gray-800 dark:text-slate-200 rich-editor-content empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400"
+                    />
+                </div>
+            );
+        };
+
+        // --- COMPONENTE: MÚLTIPLOS VÍNCULOS COMERCIAIS (PRODUTOS/KITS CRM) ---
+        const ItensVinculadosManager = ({ value = [], onChange, produtosOptions = [], kitsOptions = [] }) => {
+            const [tipo, setTipo] = useState('Produto');
+            const [selecionado, setSelecionado] = useState('');
+            const [qtd, setQtd] = useState(1);
+
+            const handleAdd = () => {
+                if (!selecionado || qtd <= 0) return;
+                const newVal = [...(Array.isArray(value) ? value : []), { tipo, item: selecionado, qtd }];
+                onChange(newVal);
+                setSelecionado('');
+                setQtd(1);
+            };
+
+            const handleRemove = (idx) => {
+                const newVal = (Array.isArray(value) ? value : []).filter((_, i) => i !== idx);
+                onChange(newVal);
+            };
+
+            const options = tipo === 'Produto' ? produtosOptions : kitsOptions;
+
+            return (
+                <div className="border border-gray-200 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-slate-800 shadow-sm mt-1">
+                    <div className="flex flex-wrap gap-2 mb-3">
+                        {(Array.isArray(value) ? value : []).map((v, i) => (
+                            <span key={i} className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md text-xs font-bold text-gray-700 dark:text-gray-200 shadow-sm transition">
+                                <span className={v.tipo === 'Produto' ? 'text-mercantil-blue dark:text-blue-400' : 'text-mercantil-orange dark:text-orange-400'}>
+                                    <i className={v.tipo === 'Produto' ? 'fas fa-box mr-1' : 'fas fa-boxes-stacked mr-1'}></i>{v.tipo}:
+                                </span>
+                                <span className="truncate max-w-[250px]" title={v.item}>{v.item}</span>
+                                <span className="bg-gray-200 dark:bg-slate-600 px-2 py-0.5 rounded-full text-mercantil-dark dark:text-white">Qtd: {v.qtd}</span>
+                                <button type="button" onClick={() => handleRemove(i)} className="text-red-500 hover:text-red-700 transition ml-1"><i className="fas fa-times-circle"></i></button>
+                            </span>
+                        ))}
+                        {(Array.isArray(value) ? value : []).length === 0 && (
+                            <span className="text-xs text-gray-400 dark:text-gray-500 italic">Nenhum item adicionado até o momento.</span>
+                        )}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50 dark:bg-slate-900 p-3 rounded-lg border border-gray-200 dark:border-slate-700">
+                        <div className="md:col-span-3">
+                            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Tipo de Item</label>
+                            <select value={tipo} onChange={e => {setTipo(e.target.value); setSelecionado('');}} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm">
+                                <option value="Produto">Produto / Peça</option>
+                                <option value="Kit">Kit Montado</option>
+                            </select>
+                        </div>
+                        <div className="md:col-span-6">
+                            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Selecione o {tipo}</label>
+                            <select value={selecionado} onChange={e => setSelecionado(e.target.value)} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm">
+                                <option value="">Selecione na lista...</option>
+                                {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                            </select>
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Quantidade</label>
+                            <input type="number" min="1" value={qtd} onChange={e => setQtd(parseInt(e.target.value)||1)} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm" />
+                        </div>
+                        <div className="md:col-span-1">
+                            <button type="button" onClick={handleAdd} disabled={!selecionado} className="w-full bg-mercantil-blue text-white p-2 rounded hover:bg-blue-800 disabled:bg-gray-400 disabled:dark:bg-slate-700 flex items-center justify-center transition shadow-sm h-[38px]" title="Adicionar à lista">
+                                <i className="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- COMPONENTES UI COMPARTILHADOS ---
+        const Modal = ({ title, children, onClose, onSave, extraButtons }) => (
             <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 fade-in p-4 backdrop-blur-sm">
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden border dark:border-slate-700">
                     <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900">
                         <h3 className="text-xl font-bold text-mercantil-dark dark:text-white">{title}</h3>
                         <button onClick={onClose} className="text-gray-400 hover:text-red-500 transition"><i className="fas fa-times text-xl"></i></button>
                     </div>
-                    <div className="p-6 overflow-y-auto flex-1 dark:text-slate-200 custom-scroll">{children}</div>
-                    {(onSave) && (
-                        <div className="p-5 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex justify-end gap-3">
-                            <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-lg hover:bg-gray-300 transition">Cancelar</button>
-                            <button onClick={onSave} className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 font-medium shadow-md transition">Salvar Alterações</button>
+                    <div className="p-6 overflow-y-auto flex-1 dark:text-slate-200 custom-scroll">
+                        {children}
+                    </div>
+                    {(onSave || extraButtons) && (
+                        <div className="p-5 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex justify-between items-center">
+                            <div>{extraButtons}</div>
+                            <div className="flex gap-3">
+                                <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-lg hover:bg-gray-300 dark:hover:bg-slate-600 font-medium transition">Cancelar</button>
+                                {onSave && <button onClick={onSave} className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 font-medium shadow-md transition">Salvar Alterações</button>}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -188,33 +312,586 @@
                 <form onSubmit={e => { e.preventDefault(); onSave(data); }} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         {config.map(f => {
-                            const colClass = f.full ? 'col-span-1 md:col-span-4' : f.half ? 'col-span-1 md:col-span-2' : 'col-span-1';
+                            const colClass = f.full ? 'col-span-1 md:col-span-4' : 
+                                             f.threeQuarters ? 'col-span-1 md:col-span-3' : 
+                                             f.half ? 'col-span-1 md:col-span-2' : 
+                                             'col-span-1';
                             return (
                                 <div key={f.name} className={colClass}>
                                     <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wider">{f.label}</label>
-                                    {f.type === 'select' ? (
-                                        <select required={f.required} className="w-full border rounded p-2 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})}>
-                                            <option value="">Selecione...</option>
-                                            {f.options && f.options.map((o, idx) => <option key={idx} value={o}>{o}</option>)}
-                                        </select>
-                                    ) : f.type === 'textarea' ? (
-                                        <textarea required={f.required} className="w-full border rounded p-2 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} rows="3" />
+                                    
+                                    {f.type === 'vinculos_comerciais' ? (
+                                        <ItensVinculadosManager 
+                                            value={data[f.name]} 
+                                            onChange={v => setData({...data, [f.name]: v})} 
+                                            produtosOptions={f.produtos} 
+                                            kitsOptions={f.kits} 
+                                        />
                                     ) : (
-                                        <input required={f.required} type={f.type||'text'} className="w-full border rounded p-2 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} readOnly={f.readOnly} placeholder={f.placeholder || ''} />
+                                        <div className="flex gap-2">
+                                            {f.type === 'select' ? (
+                                                <select required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})}>
+                                                    <option value="">Selecione...</option>
+                                                    {f.options && f.options.map((o, idx) => <option key={idx} value={o}>{o}</option>)}
+                                                </select>
+                                            ) : f.type === 'textarea' ? (
+                                                <textarea required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} rows="3" placeholder={f.placeholder || ''} />
+                                            ) : (
+                                                <input required={f.required} type={f.type||'text'} min={f.min} step={f.step} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} readOnly={f.readOnly} placeholder={f.placeholder || ''} />
+                                            )}
+                                            {f.button && (
+                                                <button type="button" onClick={() => f.action(setData)} className="bg-mercantil-blue text-white px-4 py-2 rounded shadow hover:bg-blue-800 whitespace-nowrap text-sm font-bold flex items-center transition">
+                                                    <i className={`${f.icon || "fas fa-bolt"} mr-2`}></i> {f.button}
+                                                </button>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             );
                         })}
                     </div>
-                    <div className="flex justify-end gap-3 pt-6 mt-4 border-t dark:border-slate-700">
-                        <button type="button" onClick={onCancel} className="px-5 py-2 border rounded-lg text-gray-700 dark:text-slate-300 font-medium">Cancelar</button>
-                        <button type="submit" className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 font-medium flex items-center transition"><i className="fas fa-save mr-2"></i> Salvar</button>
+                    <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700">
+                        <button type="button" onClick={onCancel} className="px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium">Cancelar</button>
+                        <button type="submit" className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex items-center transition"><i className="fas fa-save mr-2"></i> Salvar Registro</button>
                     </div>
                 </form>
             );
         };
 
-        const BaseManager = ({ title, icon, data, loading, columns, formConfig, onSave, onDelete, showToast }) => {
+        // --- FUNÇÃO AUXILIAR GLOBAL PARA VÍNCULOS ---
+        const getGlobalLinkOptions = (tipo, db) => {
+            switch(tipo) {
+                case 'Produtos': return db.produtos.filter(p=>p.SKU).map(p => ({ id: p.SKU, label: `${p.SKU} - ${p['Título']?.substring(0,30)}` }));
+                case 'Kits': return db.kits.filter(k=>k.SKU).map(k => ({ id: k.SKU, label: `${k.SKU} - ${k['Título']?.substring(0,30)}` }));
+                case 'CRM (Atendimentos)': return db.atendimentos.filter(a=>a.protocolo).map(a => ({ id: a.protocolo, label: `${a.protocolo} - ${a.cliente}` }));
+                case 'Qualidade': return db.qualidade.filter(q=>q.data).map(q => ({ id: q.id, label: `NC: ${q.data} - ${q.tipo}` }));
+                case 'Marketing': return db.marketing.filter(m=>m.data).map(m => ({ id: m.id, label: `Pauta: ${m.data} - ${m.plataforma}` }));
+                case 'Fretes': return db.fretes.filter(f=>f.city).map(f => ({ id: f.id, label: `Frete: ${f.city} (${f.cepStart})` }));
+                default: return [];
+            }
+        };
+
+        // --- COMPONENTE GESTÃO DE TAREFAS (KANBAN) ---
+        const TarefasManager = ({ tarefas, setTarefas, db, showToast }) => {
+            const [modalData, setModalData] = useState(null);
+            const [tempVinculos, setTempVinculos] = useState([]);
+            const [currentVinculoTipo, setCurrentVinculoTipo] = useState('');
+            const [currentVinculoId, setCurrentVinculoId] = useState('');
+            
+            const [responsaveis, setResponsaveis] = useState([]);
+            const [novoResponsavel, setNovoResponsavel] = useState('');
+
+            const openTaskModal = (task = null) => {
+                if (task) {
+                    setModalData(task);
+                    let initialVinculos = task.vinculos ? [...task.vinculos] : [];
+                    if (initialVinculos.length === 0 && task.vinculoTipo && task.vinculoId) {
+                        initialVinculos.push({ tipo: task.vinculoTipo, id: task.vinculoId, label: task.vinculoId });
+                    }
+                    setTempVinculos(initialVinculos);
+                    
+                    let resps = [];
+                    if (Array.isArray(task.responsaveis)) resps = [...task.responsaveis];
+                    else if (task.responsavel) resps = [task.responsavel];
+                    setResponsaveis(resps);
+                } else {
+                    setModalData({ status: 'Pendente', prioridade: 'Média' });
+                    setTempVinculos([]);
+                    setResponsaveis([]);
+                }
+                setCurrentVinculoTipo('');
+                setCurrentVinculoId('');
+                setNovoResponsavel('');
+            };
+
+            const addVinculo = () => {
+                if (!currentVinculoTipo || !currentVinculoId) return;
+                const option = getGlobalLinkOptions(currentVinculoTipo, db).find(o => o.id === currentVinculoId);
+                if (option) {
+                    if (!tempVinculos.some(v => v.tipo === currentVinculoTipo && v.id === currentVinculoId)) {
+                        setTempVinculos([...tempVinculos, { tipo: currentVinculoTipo, id: currentVinculoId, label: option.label }]);
+                    } else {
+                        showToast('Este vínculo já foi adicionado a esta tarefa.', 'info');
+                    }
+                }
+                setCurrentVinculoId('');
+            };
+
+            const removeVinculo = (index) => setTempVinculos(tempVinculos.filter((_, i) => i !== index));
+
+            const addResponsavel = () => {
+                const nome = novoResponsavel.trim();
+                if (nome && !responsaveis.includes(nome)) {
+                    setResponsaveis([...responsaveis, nome]);
+                    setNovoResponsavel('');
+                }
+            };
+
+            const handleSave = (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData.entries());
+                const newTask = {
+                    ...data,
+                    id: modalData.id || `TRF-${Date.now()}`,
+                    dataCriacao: modalData.dataCriacao || new Date().toISOString(),
+                    vinculos: tempVinculos,
+                    responsaveis: responsaveis
+                };
+
+                delete newTask.vinculoTipo;
+                delete newTask.vinculoId;
+                delete newTask.responsavel; 
+
+                if (modalData.id) {
+                    setTarefas(tarefas.map(t => t.id === modalData.id ? newTask : t));
+                    showToast('Tarefa atualizada com sucesso!');
+                } else {
+                    setTarefas([newTask, ...tarefas]);
+                    showToast('Nova tarefa criada com sucesso!');
+                }
+                setModalData(null);
+            };
+
+            const changeStatus = (id, newStatus) => {
+                setTarefas(tarefas.map(t => t.id === id ? { ...t, status: newStatus } : t));
+                if(newStatus === 'Concluída') showToast('Tarefa concluída!', 'success');
+            };
+
+            const deleteTask = (id) => {
+                if(window.confirm('Excluir esta tarefa permanentemente?')) {
+                    setTarefas(tarefas.filter(t => t.id !== id));
+                    showToast('Tarefa excluída.', 'success');
+                }
+            };
+
+            const TaskCard = ({ task }) => {
+                const priorityColors = { 'Alta': 'border-l-red-500', 'Média': 'border-l-yellow-500', 'Baixa': 'border-l-blue-500' };
+                // Correção no bg-slate-750 (inválido) para bg-slate-700
+                const bgColors = { 'Pendente': 'bg-white dark:bg-slate-800', 'Em Andamento': 'bg-blue-50 dark:bg-slate-700', 'Concluída': 'bg-gray-100 dark:bg-slate-900 opacity-60' };
+                
+                let displayVinculos = task.vinculos || [];
+                if (displayVinculos.length === 0 && task.vinculoTipo && task.vinculoId) {
+                    displayVinculos = [{ tipo: task.vinculoTipo, id: task.vinculoId, label: task.vinculoId }];
+                }
+
+                const displayResponsaveis = task.responsaveis && task.responsaveis.length > 0 
+                    ? task.responsaveis 
+                    : (task.responsavel ? [task.responsavel] : []);
+
+                return (
+                    <div className={`${bgColors[task.status]} rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 p-4 border-l-4 ${priorityColors[task.prioridade] || 'border-l-gray-400'} hover:shadow-md transition cursor-pointer relative group`} onClick={() => openTaskModal(task)}>
+                        <div className="flex justify-between items-start mb-2">
+                            <h4 className="font-bold text-sm text-gray-800 dark:text-white leading-tight pr-6">{task.titulo}</h4>
+                            <span className="text-xs font-bold text-gray-400 whitespace-nowrap">{task.dataLimite ? new Date(task.dataLimite).toLocaleDateString() : ''}</span>
+                        </div>
+                        
+                        {displayResponsaveis.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                                {displayResponsaveis.map((resp, idx) => (
+                                    <div key={idx} className="text-[10px] font-bold text-mercantil-blue dark:text-blue-300 bg-blue-100/50 dark:bg-slate-800 px-1.5 py-0.5 rounded flex items-center gap-1 border border-blue-200 dark:border-slate-600">
+                                        <i className="fas fa-user-circle"></i> {resp}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 mb-3">{task.descricao}</p>
+                        
+                        {displayVinculos.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-3">
+                                {displayVinculos.map((v, i) => (
+                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-slate-800 rounded text-[10px] font-bold text-gray-600 dark:text-gray-300">
+                                        <i className="fas fa-link"></i> {v.tipo}: {String(v.label || v.id).substring(0,18)}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="flex items-center gap-2 mt-auto" onClick={e => e.stopPropagation()}>
+                            {task.status !== 'Pendente' && <button onClick={()=>changeStatus(task.id, 'Pendente')} className="flex-1 py-1 text-xs font-bold rounded border border-gray-300 dark:border-slate-500 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors">Pendente</button>}
+                            {task.status !== 'Em Andamento' && task.status !== 'Concluída' && <button onClick={()=>changeStatus(task.id, 'Em Andamento')} className="flex-1 py-1 text-xs font-bold rounded bg-mercantil-blue text-white hover:bg-blue-800 shadow-sm transition-colors">Iniciar</button>}
+                            {task.status !== 'Concluída' && <button onClick={()=>changeStatus(task.id, 'Concluída')} className="flex-1 py-1 text-xs font-bold rounded bg-green-600 text-white hover:bg-green-700 shadow-sm transition-colors"><i className="fas fa-check"></i> Concluir</button>}
+                        </div>
+                        
+                        <button onClick={(e)=>{e.stopPropagation(); deleteTask(task.id);}} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><i className="fas fa-trash text-xs"></i></button>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="flex flex-col h-full fade-in">
+                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex justify-between items-center rounded-t-xl">
+                        <div>
+                            <h2 className="text-xl font-bold text-mercantil-dark dark:text-white flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-center text-mercantil-orange"><i className="fas fa-check-square"></i></div>
+                                Gestão de Tarefas
+                            </h2>
+                            <p className="text-sm text-gray-500 mt-1">Quadro Kanban integrado com todas as áreas do ERP.</p>
+                        </div>
+                        <button onClick={() => openTaskModal()} className="bg-mercantil-blue hover:bg-blue-800 text-white px-5 py-2.5 rounded-lg font-bold transition shadow-sm flex items-center">
+                            <i className="fas fa-plus mr-2"></i> Nova Tarefa
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-x-auto p-6 bg-gray-100 dark:bg-slate-900 custom-scroll rounded-b-xl border border-t-0 border-gray-200 dark:border-slate-700">
+                        <div className="flex gap-6 min-w-max h-full">
+                            {['Pendente', 'Em Andamento', 'Concluída'].map(coluna => {
+                                const columnTasks = tarefas.filter(t => t.status === coluna);
+                                return (
+                                    <div key={coluna} className="w-80 flex flex-col h-full">
+                                        <div className={`mb-3 pb-2 border-b-2 font-bold text-sm text-gray-600 dark:text-gray-300 flex justify-between items-center ${coluna === 'Pendente' ? 'border-gray-400' : coluna === 'Em Andamento' ? 'border-mercantil-blue' : 'border-green-500'}`}>
+                                            <span className="uppercase tracking-wider">{coluna}</span>
+                                            <span className="bg-white dark:bg-slate-800 text-xs px-2 py-1 rounded shadow-sm">{columnTasks.length}</span>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto space-y-3 custom-scroll pr-2 pb-4">
+                                            {columnTasks.map(task => <TaskCard key={task.id} task={task} />)}
+                                            {columnTasks.length === 0 && <div className="text-center p-4 text-xs font-medium text-gray-400 border border-dashed border-gray-300 dark:border-slate-700 rounded-lg">Nenhuma tarefa</div>}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {modalData && (
+                        <Modal title={modalData.id ? 'Editar Tarefa' : 'Nova Tarefa'} onClose={() => setModalData(null)}>
+                            <form id="taskForm" onSubmit={handleSave} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="md:col-span-2">
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Título da Tarefa *</label>
+                                        <input type="text" name="titulo" required defaultValue={modalData.titulo} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" placeholder="O que precisa ser feito?" />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Descrição</label>
+                                        <textarea name="descricao" rows="3" defaultValue={modalData.descricao} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" placeholder="Detalhes da tarefa..."></textarea>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Status</label>
+                                        <select name="status" defaultValue={modalData.status} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white">
+                                            <option value="Pendente">Pendente</option>
+                                            <option value="Em Andamento">Em Andamento</option>
+                                            <option value="Concluída">Concluída</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Prioridade</label>
+                                        <select name="prioridade" defaultValue={modalData.prioridade} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white">
+                                            <option value="Baixa">Baixa</option>
+                                            <option value="Média">Média</option>
+                                            <option value="Alta">Alta</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div className="md:col-span-1">
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Responsáveis</label>
+                                        {responsaveis.length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mb-2 p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg">
+                                                {responsaveis.map((resp, idx) => (
+                                                    <span key={idx} className="inline-flex items-center gap-1 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 text-mercantil-blue dark:text-blue-400 px-2 py-1 rounded text-xs font-bold shadow-sm">
+                                                        <i className="fas fa-user-circle"></i> {resp}
+                                                        <button type="button" onClick={() => setResponsaveis(responsaveis.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700 ml-1 focus:outline-none transition"><i className="fas fa-times-circle"></i></button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="text" 
+                                                value={novoResponsavel}
+                                                onChange={(e) => setNovoResponsavel(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        addResponsavel();
+                                                    }
+                                                }}
+                                                className="flex-1 border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" 
+                                                placeholder="Adicionar nome..." 
+                                            />
+                                            <button 
+                                                type="button" 
+                                                onClick={addResponsavel}
+                                                disabled={!novoResponsavel.trim()}
+                                                className="bg-mercantil-blue hover:bg-blue-800 disabled:bg-gray-400 disabled:dark:bg-slate-700 text-white px-3 py-2 rounded transition flex items-center justify-center shadow-sm"
+                                            >
+                                                <i className="fas fa-plus"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Prazo / Data Limite</label>
+                                        <input type="date" name="dataLimite" defaultValue={modalData.dataLimite} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" />
+                                    </div>
+                                    
+                                    <div className="md:col-span-2 border-t border-gray-200 dark:border-slate-700 pt-5 mt-2">
+                                        <h4 className="text-sm font-bold text-mercantil-blue dark:text-blue-400 mb-3"><i className="fas fa-link mr-2"></i>Vínculos Múltiplos com o Sistema (Opcional)</h4>
+                                        
+                                        {tempVinculos.length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mb-4 p-3 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700">
+                                                {tempVinculos.map((v, i) => (
+                                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded text-xs font-bold text-gray-700 dark:text-gray-200 shadow-sm">
+                                                        <span className="text-mercantil-blue dark:text-blue-400">{v.tipo}:</span> {v.label}
+                                                        <button type="button" onClick={() => removeVinculo(i)} className="ml-1 text-red-500 hover:text-red-700 focus:outline-none transition-colors" title="Remover Vínculo"><i className="fas fa-times-circle"></i></button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50 dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-slate-700">
+                                            <div className="md:col-span-4">
+                                                <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Módulo / Área</label>
+                                                <select value={currentVinculoTipo} onChange={(e) => { setCurrentVinculoTipo(e.target.value); setCurrentVinculoId(''); }} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm">
+                                                    <option value="">Selecione uma área...</option>
+                                                    <option value="Produtos">Produtos / Peças</option>
+                                                    <option value="Kits">Kits</option>
+                                                    <option value="CRM (Atendimentos)">CRM (Atendimentos)</option>
+                                                    <option value="Qualidade">Qualidade (NCs)</option>
+                                                    <option value="Marketing">Marketing</option>
+                                                    <option value="Fretes">Fretes</option>
+                                                </select>
+                                            </div>
+                                            <div className="md:col-span-6">
+                                                <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Registro Específico</label>
+                                                <select value={currentVinculoId} onChange={(e) => setCurrentVinculoId(e.target.value)} disabled={!currentVinculoTipo} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm disabled:bg-gray-200 disabled:dark:bg-slate-700">
+                                                    <option value="">{currentVinculoTipo ? 'Selecione o registro...' : 'Escolha a área primeiro'}</option>
+                                                    {currentVinculoTipo && getGlobalLinkOptions(currentVinculoTipo, db).map(opt => (
+                                                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <button type="button" onClick={addVinculo} disabled={!currentVinculoTipo || !currentVinculoId} className="w-full bg-mercantil-blue hover:bg-blue-800 disabled:bg-gray-400 disabled:dark:bg-slate-600 text-white p-2 rounded text-sm font-bold transition shadow-sm flex items-center justify-center">
+                                                    <i className="fas fa-plus mr-1"></i> Adicionar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700">
+                                    <button type="button" onClick={() => setModalData(null)} className="px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium">Cancelar</button>
+                                    <button type="submit" className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex items-center transition"><i className="fas fa-save mr-2"></i> Salvar Tarefa</button>
+                                </div>
+                            </form>
+                        </Modal>
+                    )}
+                </div>
+            );
+        };
+
+        // --- COMPONENTE GESTÃO DE BLOCO DE NOTAS ---
+        const NotasManager = ({ notas, setNotas, db, showToast }) => {
+            const [modalData, setModalData] = useState(null);
+            const [tempVinculos, setTempVinculos] = useState([]);
+            const [currentVinculoTipo, setCurrentVinculoTipo] = useState('');
+            const [currentVinculoId, setCurrentVinculoId] = useState('');
+
+            const openNotaModal = (nota = null) => {
+                if (nota) {
+                    setModalData(nota);
+                    setTempVinculos(nota.vinculos ? [...nota.vinculos] : []);
+                } else {
+                    setModalData({ titulo: '', conteudo: '', cor: 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-700' });
+                    setTempVinculos([]);
+                }
+                setCurrentVinculoTipo('');
+                setCurrentVinculoId('');
+            };
+
+            const addVinculo = () => {
+                if (!currentVinculoTipo || !currentVinculoId) return;
+                const option = getGlobalLinkOptions(currentVinculoTipo, db).find(o => o.id === currentVinculoId);
+                if (option) {
+                    if (!tempVinculos.some(v => v.tipo === currentVinculoTipo && v.id === currentVinculoId)) {
+                        setTempVinculos([...tempVinculos, { tipo: currentVinculoTipo, id: currentVinculoId, label: option.label }]);
+                    } else {
+                        showToast('Vínculo já adicionado a esta nota.', 'info');
+                    }
+                }
+                setCurrentVinculoId('');
+            };
+
+            const removeVinculo = (index) => setTempVinculos(tempVinculos.filter((_, i) => i !== index));
+
+            const handleSave = (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData.entries());
+                
+                const newNota = {
+                    ...data,
+                    conteudo: modalData.conteudo, // Pega o estado atualizado do editor
+                    id: modalData.id || `NOTA-${Date.now()}`,
+                    dataCriacao: modalData.dataCriacao || new Date().toISOString(),
+                    vinculos: tempVinculos
+                };
+
+                if (!newNota.titulo.trim() && !newNota.conteudo.trim()) {
+                    showToast('A nota não pode ficar totalmente vazia.', 'error');
+                    return;
+                }
+
+                if (modalData.id) {
+                    setNotas(notas.map(n => n.id === modalData.id ? newNota : n));
+                    showToast('Nota atualizada!');
+                } else {
+                    setNotas([newNota, ...notas]);
+                    showToast('Nota criada com sucesso!');
+                }
+                setModalData(null);
+            };
+
+            const deleteNota = (id) => {
+                if(window.confirm('Excluir esta nota permanentemente?')) {
+                    setNotas(notas.filter(n => n.id !== id));
+                    showToast('Nota excluída.', 'success');
+                }
+            };
+
+            const NotaCard = ({ nota }) => {
+                return (
+                    <div className={`${nota.cor || 'bg-white dark:bg-slate-800'} rounded-lg shadow-sm border p-4 hover:shadow-md transition cursor-pointer relative group flex flex-col h-full`} onClick={() => openNotaModal(nota)}>
+                        <div className="flex justify-between items-start mb-2">
+                            <h4 className="font-bold text-sm text-gray-800 dark:text-slate-100 pr-6 break-words">{nota.titulo || 'Sem Título'}</h4>
+                            <span className="text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{new Date(nota.dataCriacao).toLocaleDateString()}</span>
+                        </div>
+                        
+                        <div className="text-sm text-gray-700 dark:text-gray-300 line-clamp-4 mb-4 flex-1 rich-editor-content" dangerouslySetInnerHTML={{ __html: nota.conteudo || '' }} />
+                        
+                        {(nota.vinculos || []).length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-auto pt-2 border-t border-black/5 dark:border-white/5">
+                                {nota.vinculos.map((v, i) => (
+                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-black/5 dark:bg-white/10 rounded text-[10px] font-bold text-gray-700 dark:text-gray-300">
+                                        <i className="fas fa-link"></i> {v.tipo}: {String(v.label || v.id).substring(0,15)}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        <button onClick={(e)=>{e.stopPropagation(); deleteNota(nota.id);}} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><i className="fas fa-trash text-xs"></i></button>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="flex flex-col h-full fade-in">
+                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex justify-between items-center rounded-t-xl">
+                        <div>
+                            <h2 className="text-xl font-bold text-mercantil-dark dark:text-white flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-center text-yellow-500"><i className="fas fa-sticky-note"></i></div>
+                                Bloco de Notas
+                            </h2>
+                            <p className="text-sm text-gray-500 mt-1">Anotações rápidas com suporte a Emojis, formatação e vínculos com o ERP.</p>
+                        </div>
+                        <button onClick={() => openNotaModal()} className="bg-mercantil-blue hover:bg-blue-800 text-white px-5 py-2.5 rounded-lg font-bold transition shadow-sm flex items-center">
+                            <i className="fas fa-plus mr-2"></i> Nova Nota
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-slate-900 custom-scroll rounded-b-xl border border-t-0 border-gray-200 dark:border-slate-700">
+                        {notas.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-slate-500">
+                                <i className="fas fa-sticky-note text-6xl mb-4 opacity-50"></i>
+                                <p className="text-lg font-medium">Nenhuma nota criada.</p>
+                                <p className="text-sm">Clique em "Nova Nota" para começar.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 items-start">
+                                {notas.map(nota => <NotaCard key={nota.id} nota={nota} />)}
+                            </div>
+                        )}
+                    </div>
+
+                    {modalData && (
+                        <Modal title={modalData.id ? 'Editar Nota' : 'Nova Nota'} onClose={() => setModalData(null)}>
+                            <form id="notaForm" onSubmit={handleSave} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Título</label>
+                                    <input type="text" name="titulo" defaultValue={modalData.titulo} className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white font-bold" placeholder="Assunto da nota..." />
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Conteúdo</label>
+                                    <RichTextEditor 
+                                        value={modalData.conteudo} 
+                                        onChange={(val) => setModalData({...modalData, conteudo: val})} 
+                                        placeholder="Escreva suas anotações aqui..." 
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-2">Cor da Nota</label>
+                                    <div className="flex gap-3">
+                                        {[
+                                            { value: 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600', color: 'bg-gray-100' },
+                                            { value: 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-700', color: 'bg-yellow-300' },
+                                            { value: 'bg-blue-100 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700', color: 'bg-blue-300' },
+                                            { value: 'bg-green-100 dark:bg-green-900/30 border-green-200 dark:border-green-700', color: 'bg-green-300' },
+                                            { value: 'bg-pink-100 dark:bg-pink-900/30 border-pink-200 dark:border-pink-700', color: 'bg-pink-300' }
+                                        ].map(c => (
+                                            <label key={c.value} className="cursor-pointer relative">
+                                                <input type="radio" name="cor" value={c.value} defaultChecked={modalData.cor === c.value || (!modalData.cor && c.value.includes('yellow'))} className="sr-only peer" />
+                                                <div className={`w-8 h-8 rounded-full border-2 border-transparent peer-checked:border-gray-800 dark:peer-checked:border-white ${c.color} shadow-sm transition`}></div>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                                
+                                <div className="border-t border-gray-200 dark:border-slate-700 pt-5 mt-2">
+                                    <h4 className="text-sm font-bold text-mercantil-blue dark:text-blue-400 mb-3"><i className="fas fa-link mr-2"></i>Vincular Registros (Opcional)</h4>
+                                    
+                                    {tempVinculos.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mb-4 p-3 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700">
+                                            {tempVinculos.map((v, i) => (
+                                                <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded text-xs font-bold text-gray-700 dark:text-gray-200 shadow-sm">
+                                                    <span className="text-mercantil-blue dark:text-blue-400">{v.tipo}:</span> {v.label}
+                                                    <button type="button" onClick={() => removeVinculo(i)} className="ml-1 text-red-500 hover:text-red-700 focus:outline-none transition-colors" title="Remover Vínculo"><i className="fas fa-times-circle"></i></button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50 dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-slate-700">
+                                        <div className="md:col-span-4">
+                                            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Módulo / Área</label>
+                                            <select value={currentVinculoTipo} onChange={(e) => { setCurrentVinculoTipo(e.target.value); setCurrentVinculoId(''); }} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm">
+                                                <option value="">Selecione uma área...</option>
+                                                <option value="Produtos">Produtos / Peças</option>
+                                                <option value="Kits">Kits</option>
+                                                <option value="CRM (Atendimentos)">CRM (Atendimentos)</option>
+                                                <option value="Qualidade">Qualidade (NCs)</option>
+                                                <option value="Marketing">Marketing</option>
+                                                <option value="Fretes">Fretes</option>
+                                            </select>
+                                        </div>
+                                        <div className="md:col-span-6">
+                                            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Registro Específico</label>
+                                            <select value={currentVinculoId} onChange={(e) => setCurrentVinculoId(e.target.value)} disabled={!currentVinculoTipo} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm disabled:bg-gray-200 disabled:dark:bg-slate-700">
+                                                <option value="">{currentVinculoTipo ? 'Selecione o registro...' : 'Escolha a área primeiro'}</option>
+                                                {currentVinculoTipo && getGlobalLinkOptions(currentVinculoTipo, db).map(opt => (
+                                                    <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <button type="button" onClick={addVinculo} disabled={!currentVinculoTipo || !currentVinculoId} className="w-full bg-mercantil-blue hover:bg-blue-800 disabled:bg-gray-400 disabled:dark:bg-slate-600 text-white p-2 rounded text-sm font-bold transition shadow-sm flex items-center justify-center">
+                                                <i className="fas fa-plus mr-1"></i> Adicionar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-200 dark:border-slate-700">
+                                    <button type="button" onClick={() => setModalData(null)} className="px-5 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium">Cancelar</button>
+                                    <button type="submit" className="px-6 py-2 bg-mercantil-orange text-white rounded-lg hover:bg-orange-700 shadow-md font-medium flex items-center transition"><i className="fas fa-save mr-2"></i> Salvar Nota</button>
+                                </div>
+                            </form>
+                        </Modal>
+                    )}
+                </div>
+            );
+        };
+
+        const BaseManager = ({ title, icon, data, columns, formConfig, onSave, onDelete, onValidate, showToast }) => {
             const [editModal, setEditModal] = useState(null);
             const [search, setSearch] = useState('');
             
@@ -224,29 +901,50 @@
                 )
             ) : [];
 
-            const handleSave = async (formData) => {
-                await onSave(formData);
+            const handleSave = (formData) => {
+                if(onValidate && !onValidate(formData)) return;
+                const finalData = { ...formData, id: formData.id || `ID-${Date.now()}-${Math.random().toString(36).substr(2,5)}` };
+                onSave(finalData);
                 setEditModal(null);
-                showToast('Salvo na nuvem com sucesso!');
             };
 
-            const handleDelete = async (id) => {
-                if(window.confirm('Excluir este registro permanentemente da nuvem?')) {
-                    await onDelete(id);
-                    showToast('Registro excluído!', 'success');
-                }
-            }
+            const handleExportCSV = () => {
+                if (!data || data.length === 0) return showToast('Nenhum dado para exportar', 'error');
+                const keysToExport = ['id', ...Array.from(new Set(data.flatMap(Object.keys))).filter(k => k !== 'id')];
+                const csvContent = [
+                    keysToExport.join(','),
+                    ...data.map(item => keysToExport.map(k => {
+                        let val = item[k];
+                        if (Array.isArray(val)) val = JSON.stringify(val);
+                        return `"${(val||'').toString().replace(/"/g, '""')}"`;
+                    }).join(','))
+                ].join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = `${title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+                link.click();
+                showToast('CSV exportado com sucesso!', 'success');
+            };
 
             return (
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col h-full fade-in w-full overflow-hidden">
-                    <div className="p-5 border-b bg-gray-50 dark:bg-slate-900 dark:border-slate-700 flex flex-col lg:flex-row justify-between items-center gap-4">
+                    <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col lg:flex-row justify-between items-center gap-4 rounded-t-xl w-full">
                         <h2 className="text-xl font-bold text-mercantil-dark dark:text-white flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center text-mercantil-blue"><i className={icon}></i></div>
-                            <span>{title} {loading && <i className="fas fa-sync fa-spin text-sm ml-2 text-gray-400" title="Sincronizando..."></i>}</span>
+                            <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-gray-200 dark:border-slate-700 flex items-center justify-center text-mercantil-blue shrink-0"><i className={icon}></i></div>
+                            <span className="truncate">{title}</span>
                         </h2>
-                        <div className="flex gap-3 w-full lg:w-auto">
-                            <input type="text" placeholder="Buscar..." className="w-full pl-4 pr-4 py-2 border rounded-lg outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white" value={search} onChange={e=>setSearch(e.target.value)} />
-                            <button onClick={() => setEditModal({})} className="bg-mercantil-blue text-white px-4 py-2 rounded-lg font-medium whitespace-nowrap"><i className="fas fa-plus mr-2"></i>Novo</button>
+                        <div className="flex flex-col sm:flex-row w-full lg:w-auto gap-3">
+                            <div className="relative w-full sm:w-64">
+                                <i className="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                                <input type="text" placeholder="Buscar registros..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm" value={search} onChange={e=>setSearch(e.target.value)} />
+                            </div>
+                            <button onClick={handleExportCSV} className="bg-green-600 hover:bg-green-800 text-white px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center whitespace-nowrap text-sm">
+                                <i className="fas fa-file-csv mr-2"></i>Exportar CSV
+                            </button>
+                            <button onClick={() => setEditModal({})} className="bg-mercantil-blue hover:bg-blue-800 text-white px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center whitespace-nowrap text-sm">
+                                <i className="fas fa-plus mr-2"></i>Novo
+                            </button>
                         </div>
                     </div>
                     <div className="w-full overflow-x-auto custom-scroll flex-1 p-0">
@@ -254,18 +952,21 @@
                             <thead className="text-xs text-gray-600 dark:text-gray-400 uppercase bg-gray-100 dark:bg-slate-700">
                                 <tr>
                                     {columns.map(c => <th key={c.field} className="px-4 py-3 whitespace-nowrap">{c.header}</th>)}
-                                    <th className="px-4 py-3 text-right">Ações</th>
+                                    <th className="px-4 py-3 text-right whitespace-nowrap">Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {loading && filtered.length === 0 ? <tr><td colSpan={columns.length + 1} className="text-center py-8">Carregando dados da nuvem...</td></tr> :
-                                filtered.length === 0 ? <tr><td colSpan={columns.length + 1} className="text-center py-8 text-gray-500">Nenhum registro.</td></tr> :
-                                filtered.map((item) => (
-                                    <tr key={item.id} className="border-b dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-slate-750 transition">
-                                        {columns.map(c => <td key={c.field} className="px-4 py-3">{c.render ? c.render(item[c.field], item) : item[c.field]}</td>)}
-                                        <td className="px-4 py-3 text-right">
-                                            <button onClick={()=>setEditModal(item)} className="text-blue-600 p-2 mx-1"><i className="fas fa-edit"></i></button>
-                                            <button onClick={()=>handleDelete(item.id)} className="text-red-600 p-2 mx-1"><i className="fas fa-trash"></i></button>
+                                {filtered.length === 0 ? <tr><td colSpan={columns.length + 1} className="text-center py-8 text-gray-500">Nenhum registro encontrado.</td></tr> :
+                                filtered.map((item, idx) => (
+                                    <tr key={item.id || idx} className="border-b dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-slate-750 transition">
+                                        {columns.map(c => (
+                                            <td key={c.field} className="px-4 py-3 font-medium text-sm">
+                                                {c.render ? c.render(item[c.field], item) : item[c.field]}
+                                            </td>
+                                        ))}
+                                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                                            <button onClick={()=>setEditModal(item)} className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 p-2 mx-1 rounded transition" title="Editar"><i className="fas fa-edit"></i></button>
+                                            <button onClick={()=>{if(window.confirm('Excluir este registro?')) onDelete(item.id);}} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 p-2 mx-1 rounded transition" title="Excluir"><i className="fas fa-trash"></i></button>
                                         </td>
                                     </tr>
                                 ))}
@@ -273,7 +974,7 @@
                         </table>
                     </div>
                     {editModal && (
-                        <Modal title={editModal.id ? `Editar Registro` : `Novo Registro`} onClose={()=>setEditModal(null)}>
+                        <Modal title={editModal.id ? `Editar: ${title}` : `Novo Registro: ${title}`} onClose={()=>setEditModal(null)}>
                             <AutoForm config={formConfig} initialData={editModal} onSave={handleSave} onCancel={()=>setEditModal(null)} />
                         </Modal>
                     )}
@@ -281,213 +982,846 @@
             );
         };
 
+        // --- COMPONENTE GESTÃO DE FRETES ---
+        const FretesManager = ({ data, onSaveData, showToast }) => {
+            const [tab, setTab] = useState('consulta');
+            const [query, setQuery] = useState('');
+            const [weight, setWeight] = useState('');
+            const [results, setResults] = useState([]);
+            const [searched, setSearched] = useState(false);
+
+            const handleSearch = (e) => {
+                e.preventDefault();
+                setSearched(true);
+                const q = query.trim();
+                
+                if (!q) { setResults(data); return; }
+
+                const cleanQuery = q.replace(/\D/g, '');
+                const isNumericSearch = cleanQuery.length >= 7;
+
+                const res = data.filter(row => {
+                    let matchRegion = false;
+                    if (isNumericSearch) {
+                        const queryCepNum = parseInt(cleanQuery.substring(0, 8), 10);
+                        const startCep = parseInt((row.cepStart || '').replace(/\D/g, ''), 10);
+                        const endCep = parseInt((row.cepEnd || '').replace(/\D/g, ''), 10);
+                        if (!isNaN(startCep) && !isNaN(endCep) && queryCepNum >= startCep && queryCepNum <= endCep) matchRegion = true;
+                    } else {
+                        const cityStr = (row.city || '').toLowerCase();
+                        if (cityStr.includes(q.toLowerCase())) matchRegion = true;
+                    }
+                    if (!matchRegion) return false;
+                    if (weight) {
+                        const wMin = parseFloat((row.weightMin || '').replace(',', '.'));
+                        const wMax = parseFloat((row.weightMax || '').replace(',', '.'));
+                        const wQuery = parseFloat(weight.replace(',', '.'));
+                        if (!isNaN(wQuery)) {
+                            if (!isNaN(wMin) && wQuery < wMin) return false;
+                            if (!isNaN(wMax) && wQuery > wMax) return false;
+                        }
+                    }
+                    return true;
+                });
+                setResults(res);
+            };
+
+            const updateRow = (id, field, value) => {
+                const newData = data.map(row => row.id === id ? { ...row, [field]: value } : row);
+                onSaveData(newData);
+            };
+
+            const addRow = () => {
+                const newId = data.length > 0 ? Math.max(...data.map(d => d.id || 0)) + 1 : 1;
+                onSaveData([{ id: newId, city: '', cepStart: '', cepEnd: '', weightMin: '', weightMax: '', price: '' }, ...data]);
+                showToast('Nova linha adicionada no topo.');
+            };
+
+            const removeRow = (id) => {
+                if(window.confirm("Remover esta regra de frete?")) {
+                    onSaveData(data.filter(row => row.id !== id));
+                    showToast('Linha removida.', 'success');
+                }
+            };
+
+            const handleImportUniversal = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (typeof XLSX === 'undefined') {
+                    showToast("Biblioteca de planilhas não carregada.", "error");
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        const fileData = evt.target.result;
+                        const workbook = XLSX.read(fileData, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        
+                        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+                        const startIndex = json[0] && json[0][0] && String(json[0][0]).toLowerCase().includes('munic') ? 1 : 0;
+                        
+                        const newData = [];
+                        for (let i = startIndex; i < json.length; i++) {
+                            const row = json[i];
+                            if (!row || row.length === 0 || !row[0]) continue;
+                            
+                            newData.push({
+                                id: Date.now() + i,
+                                city: String(row[0] || '').trim(),
+                                cepStart: String(row[1] || '').trim(),
+                                cepEnd: String(row[2] || '').trim(),
+                                weightMin: String(row[3] || '').trim(),
+                                weightMax: String(row[4] || '').trim(),
+                                price: String(row[5] || '').trim()
+                            });
+                        }
+
+                        if (newData.length > 0) {
+                            if(window.confirm(`Deseja SUBSTITUIR a base atual pelos ${newData.length} novos registros? (Cancelar irá ADICIONAR aos existentes)`)){
+                                onSaveData(newData);
+                            } else {
+                                onSaveData([...newData, ...data]);
+                            }
+                            showToast(`${newData.length} registros importados com sucesso!`);
+                        } else {
+                            showToast("Planilha vazia ou em formato não reconhecido.", "error");
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        showToast("Erro ao processar o arquivo.", "error");
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+                e.target.value = '';
+            };
+
+            const handleExport = () => {
+                if (typeof XLSX === 'undefined') { showToast("Biblioteca não carregada.", "error"); return; }
+                const exportData = [['Município', 'Faixa CEP Inicial', 'Faixa CEP Final', 'Peso Mínimo (kg)', 'Peso Máximo (kg)', 'Valor do Frete (R$)']];
+                data.forEach(row => exportData.push([row.city, row.cepStart, row.cepEnd, row.weightMin, row.weightMax, row.price]));
+
+                const ws = XLSX.utils.aoa_to_sheet(exportData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Fretes");
+                XLSX.writeFile(wb, `Base_Fretes_${new Date().toISOString().split('T')[0]}.xlsx`);
+                showToast("Planilha de fretes exportada!");
+            };
+
+            return (
+                <div className="flex flex-col h-full fade-in space-y-6">
+                    <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-wrap gap-2 w-full">
+                        <button onClick={() => setTab('consulta')} className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${tab === 'consulta' ? 'bg-mercantil-blue text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600'}`}>
+                            <i className="fas fa-search mr-2"></i> Consulta Cotação
+                        </button>
+                        <button onClick={() => setTab('gestao')} className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${tab === 'gestao' ? 'bg-mercantil-blue text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600'}`}>
+                            <i className="fas fa-database mr-2"></i> Gestão da Base (Excel)
+                        </button>
+                    </div>
+
+                    {tab === 'consulta' && (
+                        <div className="space-y-6 fade-in w-full">
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700">
+                                <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-6 flex items-center gap-2">
+                                    <i className="fas fa-truck text-mercantil-orange"></i> Buscar Cotação de Frete
+                                </h2>
+                                
+                                <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4">
+                                    <div className="flex-1">
+                                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">CEP ou Bairro/Município</label>
+                                        <div className="relative">
+                                            <i className="fas fa-map-marker-alt absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                                            <input type="text" value={query} onChange={e=>setQuery(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:text-white" placeholder="Ex: 30123-456 ou Belo Horizonte" />
+                                        </div>
+                                    </div>
+                                    <div className="w-full md:w-48">
+                                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Peso Opc. (kg)</label>
+                                        <div className="relative">
+                                            <i className="fas fa-box absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                                            <input type="number" step="0.01" value={weight} onChange={e=>setWeight(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:text-white" placeholder="Ex: 5.5" />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-end">
+                                        <button type="submit" className="w-full md:w-auto px-6 py-3 rounded-lg font-bold text-white bg-mercantil-orange hover:bg-orange-700 transition-colors shadow-sm flex items-center justify-center gap-2">
+                                            <i className="fas fa-search"></i> Calcular
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            {searched && (
+                                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden fade-in w-full">
+                                    <div className="bg-gray-50 dark:bg-slate-900 px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center">
+                                        <h3 className="font-bold text-gray-800 dark:text-white">Resultados da Pesquisa</h3>
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{results.length} resultado(s)</span>
+                                    </div>
+                                    <div className="divide-y divide-gray-100 dark:divide-slate-700">
+                                        {results.length === 0 ? (
+                                            <div className="p-8 text-center text-red-600 dark:text-red-500 flex flex-col items-center">
+                                                <i className="fas fa-times-circle text-5xl mb-3 drop-shadow-md"></i>
+                                                <p className="text-xl font-bold">Fora da faixa de entrega</p>
+                                                <p className="text-sm mt-1 text-gray-500 dark:text-gray-400">Verifique o CEP digitado ou os limites de peso.</p>
+                                            </div>
+                                        ) : (
+                                            results.map(result => (
+                                                <div key={result.id} className="p-6 hover:bg-gray-50 dark:hover:bg-slate-750 transition-colors flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 dark:text-slate-300">
+                                                    <div>
+                                                        <h4 className="text-lg font-bold text-mercantil-blue dark:text-blue-400">{result.city || 'Região não especificada'}</h4>
+                                                        <p className="text-sm mt-1 flex items-center gap-2"><i className="fas fa-map-marker-alt"></i> CEP: <span className="font-mono">{result.cepStart || '00000-000'}</span> até <span className="font-mono">{result.cepEnd || '99999-999'}</span></p>
+                                                        <p className="text-sm mt-1 flex items-center gap-2"><i className="fas fa-box"></i> Peso: <span className="font-bold">{result.weightMin ? result.weightMin + 'kg' : '0kg'}</span> a <span className="font-bold">{result.weightMax ? result.weightMax + 'kg' : 'Ilimitado'}</span></p>
+                                                    </div>
+                                                    <div className="bg-green-50 dark:bg-green-900/30 border border-green-100 dark:border-green-800 rounded-lg px-6 py-3 text-center min-w-[150px]">
+                                                        <span className="block text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider mb-1">Valor do Frete</span>
+                                                        <span className="text-2xl font-bold text-green-700 dark:text-green-400 flex items-center justify-center gap-1">R$ {result.price || 'A Combinar'}</span>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {tab === 'gestao' && (
+                        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col flex-1 min-h-[500px] fade-in overflow-hidden w-full">
+                            <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                <div>
+                                    <h2 className="text-lg font-bold text-gray-800 dark:text-white">Editor da Base de Dados</h2>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">Edite na tabela. Salve como planilha para não perder os dados.</p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <input type="file" id="file-input-frete" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleImportUniversal} />
+                                    <button onClick={() => document.getElementById('file-input-frete').click()} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
+                                        <i className="fas fa-upload"></i> Importar (XLSX/CSV)
+                                    </button>
+                                    <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 bg-mercantil-blue text-white rounded-md text-sm font-bold hover:bg-blue-800 transition-colors shadow-sm">
+                                        <i className="fas fa-download"></i> Exportar
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="w-full overflow-x-auto custom-scroll p-0 flex-1">
+                                <table className="w-full min-w-[800px] text-left border-collapse dark:text-slate-300">
+                                    <thead className="bg-gray-100 dark:bg-slate-700 sticky top-0 z-10 shadow-sm text-gray-600 dark:text-gray-300">
+                                        <tr>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase w-12 text-center">#</th>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase">Município / Região</th>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase">CEP Inicial</th>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase">CEP Final</th>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase text-right">Peso Mín (kg)</th>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase text-right">Peso Máx (kg)</th>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase text-right">Valor (R$)</th>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase w-16 text-center">Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
+                                        {data.length === 0 ? <tr><td colSpan="8" className="px-4 py-12 text-center text-gray-500">Nenhuma base importada.</td></tr> :
+                                         data.map((row, index) => (
+                                            <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-slate-750 transition-colors group">
+                                                <td className="px-4 py-2 text-sm text-gray-400 text-center">{index + 1}</td>
+                                                <td className="px-2 py-2"><input type="text" className="table-input dark:bg-slate-900 dark:text-white dark:border-slate-700 rounded p-1" value={row.city||''} onChange={(e)=>updateRow(row.id, 'city', e.target.value)} placeholder="Região" /></td>
+                                                <td className="px-2 py-2"><input type="text" className="table-input font-mono text-xs dark:bg-slate-900 dark:text-white dark:border-slate-700 rounded p-1" value={row.cepStart||''} onChange={(e)=>updateRow(row.id, 'cepStart', e.target.value)} placeholder="00000-000" /></td>
+                                                <td className="px-2 py-2"><input type="text" className="table-input font-mono text-xs dark:bg-slate-900 dark:text-white dark:border-slate-700 rounded p-1" value={row.cepEnd||''} onChange={(e)=>updateRow(row.id, 'cepEnd', e.target.value)} placeholder="99999-999" /></td>
+                                                <td className="px-2 py-2"><input type="text" className="table-input text-right dark:bg-slate-900 dark:text-white dark:border-slate-700 rounded p-1" value={row.weightMin||''} onChange={(e)=>updateRow(row.id, 'weightMin', e.target.value)} placeholder="0" /></td>
+                                                <td className="px-2 py-2"><input type="text" className="table-input text-right dark:bg-slate-900 dark:text-white dark:border-slate-700 rounded p-1" value={row.weightMax||''} onChange={(e)=>updateRow(row.id, 'weightMax', e.target.value)} placeholder="10" /></td>
+                                                <td className="px-2 py-2"><input type="text" className="table-input text-right font-bold text-green-600 dark:text-green-400 dark:bg-slate-900 dark:border-slate-700 rounded p-1" value={row.price||''} onChange={(e)=>updateRow(row.id, 'price', e.target.value)} placeholder="15.00" /></td>
+                                                <td className="px-4 py-2 text-center">
+                                                    <button onClick={()=>removeRow(row.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded transition" title="Remover"><i className="fas fa-trash"></i></button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div className="p-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 rounded-b-xl flex justify-between items-center">
+                                <span className="text-sm text-gray-500 dark:text-gray-400 font-bold">Total de registros: {data.length}</span>
+                                <button onClick={addRow} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-mercantil-blue dark:text-blue-400 rounded-md text-sm font-bold hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
+                                    <i className="fas fa-plus"></i> Adicionar Linha
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
         // --- APLICAÇÃO PRINCIPAL ---
         const App = () => {
-            const [firebaseReady, setFirebaseReady] = useState(!!window.FirebaseAPI);
-            const [db, setDb] = useState(null);
-            const [auth, setAuth] = useState(null);
-            const [user, setUser] = useState(null);
-            const [authLoading, setAuthLoading] = useState(true);
-
             const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
-            const [darkMode, setDarkMode] = useState(false);
-            const [activeMenu, setActiveMenu] = useState('painel');
-            const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
+            
             const showToast = (message, type = 'success') => {
                 setToast({ visible: true, message, type });
                 setTimeout(() => setToast(t => ({ ...t, visible: false })), 4000);
             };
 
-            // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+            const [darkMode, setDarkMode] = useLocalStorage('mrc_theme_dark', false);
+            const [activeMenu, setActiveMenu] = useState('painel');
+            const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+            
+            const [produtos, setProdutos] = useLocalStorage('mrc_produtos', []);
+            const [kits, setKits] = useLocalStorage('mrc_kits', []);
+            const [atendimentos, setAtendimentos] = useLocalStorage('mrc_atendimentos', []);
+            const [qualidade, setQualidade] = useLocalStorage('mrc_qualidade', []);
+            const [marketing, setMarketing] = useLocalStorage('mrc_marketing', []);
+            const [gerencia, setGerencia] = useLocalStorage('mrc_gerencia', []);
+            const [compliance, setCompliance] = useLocalStorage('mrc_compliance', []);
+            const [fretes, setFretes] = useLocalStorage('mrc_fretes', []);
+            const [tarefas, setTarefas] = useLocalStorage('mrc_tarefas', []);
+            const [notas, setNotas] = useLocalStorage('mrc_notas', []);
+            const [lastBackup, setLastBackup] = useLocalStorage('mrc_last_backup_time', null);
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyAo0q2CmP8uIHNeaozoe4W2w7yoZrznWHU",
-  authDomain: "mercantil-e-commerce.firebaseapp.com",
-  projectId: "mercantil-e-commerce",
-  storageBucket: "mercantil-e-commerce.firebasestorage.app",
-  messagingSenderId: "375252406705",
-  appId: "1:375252406705:web:61021d6a03b6c67a456d90",
-  measurementId: "G-5SWWX561JJ"
-};
+            useEffect(() => {
+                if (darkMode) document.documentElement.classList.add('dark');
+                else document.documentElement.classList.remove('dark');
+            }, [darkMode]);
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+            useEffect(() => {
+                const forceSystemBackup = () => {
+                    const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas, notas };
+                    localStorage.setItem('mrc_auto_backup_dump', JSON.stringify(fullSystemDump));
+                    setLastBackup(new Date().toISOString());
+                };
+                const intervalId = setInterval(() => {
+                    if (!lastBackup) { forceSystemBackup(); } 
+                    else {
+                        const lastTime = new Date(lastBackup).getTime();
+                        const nowTime = new Date().getTime();
+                        if ((nowTime - lastTime) >= 1800000) forceSystemBackup(); // 30 minutos
+                    }
+                }, 60000);
+                return () => clearInterval(intervalId);
+            }, [produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas, notas, lastBackup, setLastBackup]);
 
-                        // Lógica de Autenticação
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await window.FirebaseAPI.signInWithCustomToken(fireAuth, __initial_auth_token);
+            const saveStateRecord = (data, stateArray, setter) => {
+                const arr = [...(stateArray || [])];
+                const idx = arr.findIndex(i => i.id === data.id);
+                if(idx >= 0) arr[idx] = data; else arr.unshift(data);
+                setter(arr);
+                showToast('Registro salvo com sucesso!');
+            };
+
+            const deleteStateRecord = (id, stateArray, setter) => {
+                setter(stateArray.filter(i => i.id !== id));
+                showToast('Registro excluído!', 'success');
+            };
+
+            const handleUploadUniversal = (e, type) => {
+                const file = e.target.files[0];
+                if(!file) return;
+
+                if (typeof XLSX === 'undefined') {
+                    showToast("Biblioteca de planilhas não carregada.", "error");
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    try {
+                        const data = evt.target.result;
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                        
+                        if(json.length === 0) { showToast('Arquivo vazio ou formato inválido.', 'error'); return; }
+
+                        const processedData = json.map((row, index) => {
+                            let obj = { ...row };
+                            if (!obj.id && !obj.ID) obj.id = `IMP-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`;
+                            if (obj.ID) { obj.id = obj.ID; delete obj.ID; } 
+                            if(typeof obj.Observações === 'string') obj.Observações = obj.Observações.replace(/\\n/g, '\n');
+                            if(typeof obj['EAN/GTIN'] === 'string') obj['EAN/GTIN'] = obj['EAN/GTIN'].replace(/\\n/g, '\n');
+                            return obj;
+                        });
+
+                        if(type === 'produtos') {
+                            if(window.confirm(`Substituir a base de Produtos atual pelos ${processedData.length} novos? (Cancelar irá adicionar)`)) {
+                                setProdutos(processedData);
+                            } else { setProdutos([...processedData, ...produtos]); }
                         } else {
-                            // Para o seu GitHub, usaremos login anônimo (qualquer um acessa e edita)
-                            // Se quiser senha depois, basta mudar no painel do Firebase!
-                            await window.FirebaseAPI.signInAnonymously(fireAuth);
+                            if(window.confirm(`Substituir a base de Kits atual pelos ${processedData.length} novos? (Cancelar irá adicionar)`)) {
+                                setKits(processedData);
+                            } else { setKits([...processedData, ...kits]); }
                         }
+                        showToast(`${processedData.length} ${type} processados com sucesso!`, 'success');
                     } catch (error) {
-                        console.error("Erro ao inicializar Firebase", error);
-                        showToast("Erro de conexão com Banco de Dados. Preencheu suas chaves?", "error");
-                        setAuthLoading(false);
+                        console.error(error);
+                        showToast('Erro ao ler arquivo. Formato não suportado.', 'error');
                     }
                 };
+                reader.readAsArrayBuffer(file);
+                e.target.value = ''; 
+            };
 
-                if (firebaseReady) {
-                    initFirebase();
-                } else {
-                    const handleReady = () => { setFirebaseReady(true); initFirebase(); };
-                    window.addEventListener('firebase-loaded', handleReady);
-                    return () => window.removeEventListener('firebase-loaded', handleReady);
-                }
-            }, [firebaseReady]);
+            // --- CONFIGURAÇÕES DE FORMULÁRIOS DINÂMICAS ---
+            const produtoOptions = produtos && produtos.length > 0 ? produtos.filter(p => p.SKU).map(p => `${p.SKU} - ${p['Título'] ? p['Título'].substring(0,30) + '...' : 'Sem Título'}`) : [];
+            const kitOptions = kits && kits.length > 0 ? kits.filter(k => k.SKU).map(k => `${k.SKU} - ${k['Título'] ? k['Título'].substring(0,30) + '...' : 'Sem Título'}`) : [];
+            const freteOptions = fretes && fretes.length > 0 ? fretes.filter(f => f.city).map(f => `${f.city} (CEP: ${f.cepStart} a ${f.cepEnd}) - R$ ${f.price || '0,00'}`) : [];
 
-            // 2. Escuta mudanças de Usuário logado
-            useEffect(() => {
-                if (!auth) return;
-                const unsubscribe = window.FirebaseAPI.onAuthStateChanged(auth, (currentUser) => {
-                    setUser(currentUser);
-                    setAuthLoading(false);
-                    if(currentUser) showToast("Conectado à Nuvem com Sucesso!", "success");
-                });
-                return () => unsubscribe();
-            }, [auth]);
+            const crmConfig = [
+                { name: 'protocolo', label: 'Protocolo de Atendimento *', type: 'text', readOnly: true, button: 'Gerar Protocolo Oficial', icon: 'fas fa-fingerprint', full: true, required: true, placeholder: 'Clique no botão para autenticar',
+                  action: (set) => {
+                      showToast('Conectando ao World Time API...', 'info');
+                      fetch('https://worldtimeapi.org/api/timezone/America/Sao_Paulo')
+                        .then(res => res.json())
+                        .then(d => {
+                            const dt = new Date(d.datetime);
+                            const p = `PRT-${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}-${String(dt.getHours()).padStart(2,'0')}${String(dt.getMinutes()).padStart(2,'0')}${String(dt.getSeconds()).padStart(2,'0')}`;
+                            set(prev => ({...prev, protocolo: p, dataHoraOficial: d.datetime}));
+                            showToast('Protocolo gerado.', 'success');
+                        })
+                        .catch(e => {
+                            const dt = new Date();
+                            const p = `PRT-${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}-${String(dt.getHours()).padStart(2,'0')}${String(dt.getMinutes()).padStart(2,'0')}${String(dt.getSeconds()).padStart(2,'0')}`;
+                            set(prev => ({...prev, protocolo: p, dataHoraOficial: dt.toISOString()}));
+                        });
+                  }
+                },
+                { name: 'cliente', label: 'Nome / Oficina (Cliente) *', type: 'text', required: true, half: true },
+                { name: 'canal', label: 'Canal de Origem *', type: 'select', options: ['WhatsApp', 'Chat Online', 'E-mail', 'Ligação Telefônica', 'Reclame Aqui', 'Consumidor.gov', 'Balcão/Loja Física'], required: true, half: true },
+                { name: 'pedido', label: 'Número do Pedido (Marketplace/Site)', type: 'text', half: true, placeholder: 'Ex: PED-12345678' },
+                { name: 'motivo', label: 'Motivo / Assunto', type: 'select', options: ['Dúvida Técnica (Motor/Peças)', 'Cotação de Peças Linha Leve/Diesel', 'Atraso na Entrega', 'Garantia / Defeito / Troca', 'Reclamação de Atendimento', 'Elogio / Sugestão'], half: true },
+                
+                { name: 'itensVinculados', label: 'Produtos e Kits Vinculados ao Atendimento', type: 'vinculos_comerciais', full: true, produtos: produtoOptions, kits: kitOptions },
+                
+                { name: 'regiaoVinculada', label: 'Região / Frete Relacionado', type: 'select', options: freteOptions, half: true },
+                { name: 'status', label: 'Status do Atendimento *', type: 'select', options: ['Aberto - Aguardando Resolução', 'Em Andamento', 'Aguardando Cliente', 'Resolvido', 'Cancelado'], required: true, half: true },
+                { name: 'descricao', label: 'Relato do Cliente / Ocorrência', type: 'textarea', full: true, required: true }
+            ];
 
-            // 3. Conecta as Coleções (Tabelas) ao Firestore
-            const [produtos, saveProduto, delProduto, , loadProd] = useFirestoreSync(db, user, 'produtos');
-            const [kits, saveKit, delKit, , loadKits] = useFirestoreSync(db, user, 'kits');
-            const [atendimentos, saveCrm, delCrm, , loadCrm] = useFirestoreSync(db, user, 'atendimentos');
-            const [tarefas, saveTarefa, delTarefa, , loadTar] = useFirestoreSync(db, user, 'tarefas');
+            const qualidadeConfig = [
+                { name: 'data', label: 'Data da Ocorrência', type: 'date', required: true, half: true },
+                { name: 'tipo', label: 'Tipo de Indicador', type: 'select', options: ['Não Conformidade (NC) Interna', 'Falha Logística/Expedição', 'Reclamação de Peça (Garantia)', 'Sugestão de Melhoria', 'Auditoria de Processos'], required: true, half: true },
+                { name: 'protocolo', label: 'Vincular Protocolo CRM (Opcional)', type: 'text', placeholder: 'Ex: PRT-20260608...', half: true },
+                { name: 'status', label: 'Status da Investigação', type: 'select', options: ['Registrado', 'Em Análise de Causa Raiz', 'Ação Corretiva Aplicada', 'Encerrado com Sucesso'], half: true },
+                { name: 'descricao', label: 'Descrição do Desvio', type: 'textarea', full: true, required: true },
+                { name: 'acao', label: 'Plano de Ação (Preventiva/Corretiva)', type: 'textarea', full: true }
+            ];
 
-            // --- CONFIGURAÇÕES DE FORMULÁRIOS ---
+            const marketingConfig = [
+                { name: 'data', label: 'Data Prevista de Postagem', type: 'date', required: true, half: true },
+                { name: 'plataforma', label: 'Plataforma Mídia', type: 'select', options: ['Instagram', 'Facebook', 'TikTok', 'YouTube', 'Blog Site Mercantil'], required: true, half: true },
+                { name: 'tipo', label: 'Tipo de Conteúdo', type: 'select', options: ['Imagem / Foto do Estoque', 'Vídeo Técnico / Mecânica', 'Carrossel Promocional', 'Artigo/Texto'], required: true, half: true },
+                { name: 'status', label: 'Status da Peça', type: 'select', options: ['Ideia/Pauta', 'Em Produção', 'Aguardando Aprovação', 'Agendado', 'Publicado'], half: true },
+                { name: 'conteudo', label: 'Descrição da Pauta', type: 'textarea', full: true, required: true }
+            ];
+
+            const gerenciaConfig = [
+                { name: 'tipo', label: 'Categoria', type: 'select', options: ['Reunião de Alinhamento', 'Feedback Individual (1:1)', 'Ideia de Melhoria Corporativa', 'Aviso / Comunicado Geral'], required: true, half: true },
+                { name: 'data', label: 'Data do Registro', type: 'date', required: true, half: true },
+                { name: 'titulo', label: 'Título / Assunto Principal *', type: 'text', required: true, full: true },
+                { name: 'envolvidos', label: 'Colaboradores / Departamentos', type: 'text', full: true },
+                { name: 'descricao', label: 'Anotações, Pautas e Conclusões', type: 'textarea', full: true }
+            ];
+
+            const complianceConfig = [
+                { name: 'codigo', label: 'Código do Doc (Ex: POL-001)', type: 'text', required: true, half: true },
+                { name: 'titulo', label: 'Nome da Política ou Normativa', type: 'text', required: true, half: true },
+                { name: 'versao', label: 'Versão Atual do Documento', type: 'text', half: true },
+                { name: 'dataRev', label: 'Data da Última Revisão', type: 'date', required: true, half: true },
+                { name: 'status', label: 'Status da Política', type: 'select', options: ['Vigente (Aprovada)', 'Em Revisão', 'Obsoleta'], half: true },
+                { name: 'descricao', label: 'Resumo das Diretrizes', type: 'textarea', full: true }
+            ];
+
             const produtosConfig = [
                 { name: 'SKU', label: 'SKU *', required: true, half: true }, 
                 { name: 'Título', label: 'Título do Produto *', required: true, full: true }, 
-                { name: 'Status', label: 'Status', type: 'select', options: ['Ativo', 'Inativo'] }, 
-                { name: 'Peso', label: 'Peso (kg)', type: 'number', step: '0.001', half: true }, 
+                { name: 'Status', label: 'Status', type: 'select', options: ['Ativo', 'Inativo', 'Em rascunho'] }, 
+                { name: 'Índice', label: 'Índice' }, 
+                { name: 'Material', label: 'Material' }, 
+                { name: 'Status Fiscal', label: 'Status Fiscal' }, 
+                { name: 'Status Dimensões', label: 'Status Dimensões', half: true }, 
+                { name: 'Peso (kg)', label: 'Peso (kg)', type: 'number', step: '0.001', half: true }, 
+                { name: 'Comprimento (cm)', label: 'Comp. (cm)', type: 'number', step: '0.1' }, 
+                { name: 'Largura (cm)', label: 'Largura (cm)', type: 'number', step: '0.1' }, 
+                { name: 'Altura (cm)', label: 'Altura (cm)', type: 'number', step: '0.1' }, 
+                { name: 'EAN/GTIN', label: 'EAN/GTIN (Código de Barras)', type: 'textarea', full: true, placeholder: 'Ex: 7891234567890' }, 
                 { name: 'Observações', label: 'Observações', type: 'textarea', full: true }
             ];
 
-            const crmConfig = [
-                { name: 'cliente', label: 'Nome do Cliente *', type: 'text', required: true, half: true },
-                { name: 'canal', label: 'Canal de Origem', type: 'select', options: ['WhatsApp', 'E-mail', 'Telefone'], half: true },
-                { name: 'status', label: 'Status', type: 'select', options: ['Aberto', 'Resolvido'], half: true },
-                { name: 'descricao', label: 'Relato da Ocorrência', type: 'textarea', full: true, required: true }
+            const kitsConfig = [
+                { name: 'SKU', label: 'SKU do Kit *', required: true, half: true }, 
+                { name: 'Título', label: 'Título do Kit *', required: true, full: true }, 
+                { name: 'Status', label: 'Status', type: 'select', options: ['Ativo', 'Inativo', 'Em rascunho'] }, 
+                { name: 'Índice', label: 'Índice' }, 
+                { name: 'Material', label: 'Material' }, 
+                { name: 'Status Fiscal', label: 'Status Fiscal' }, 
+                { name: 'Status Dimensões', label: 'Status Dimensões', half: true }, 
+                { name: 'Peso (kg)', label: 'Peso Total (kg)', type: 'number', step: '0.001', half: true }, 
+                { name: 'Comprimento (cm)', label: 'Comp. (cm)', type: 'number', step: '0.1' }, 
+                { name: 'Largura (cm)', label: 'Largura (cm)', type: 'number', step: '0.1' }, 
+                { name: 'Altura (cm)', label: 'Altura (cm)', type: 'number', step: '0.1' }, 
+                { name: 'EAN/GTIN', label: 'EAN/GTIN', type: 'textarea', full: true }, 
+                { name: 'Observações', label: 'Observações / Composição', type: 'textarea', full: true }
             ];
 
             const catalogColumns = [
-                { field: 'SKU', header: 'SKU', render: (val) => <span className="font-mono font-bold cursor-pointer text-blue-500" onClick={()=>copyToClipboard(val, showToast)}>{val}</span> },
+                { field: 'SKU', header: 'SKU', render: (val) => <span className="font-mono font-bold cursor-pointer hover:text-blue-500" onClick={(e)=>{ e.stopPropagation(); copyToClipboard(val, showToast); }}>{val} <i className="fas fa-copy ml-1"></i></span> },
                 { field: 'Título', header: 'Título' },
-                { field: 'Status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val==='Ativo'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}`}>{val || 'N/A'}</span> }
+                { field: 'Status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val==='Ativo'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}`}>{val || 'N/A'}</span> },
+                { field: 'Dimensões', header: 'Dimensões/Peso', render: (_, item) => <span className="text-xs text-gray-500 dark:text-gray-400">{item['Peso (kg)'] ? `${item['Peso (kg)']}kg` : '--'}<br/>{item['Comprimento (cm)'] ? `${item['Comprimento (cm)']}x${item['Largura (cm)']}x${item['Altura (cm)']}` : 'Sem dimensão'}</span> },
+                { field: 'EAN/GTIN', header: 'EAN', render: (val) => val ? <span className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-mercantil-blue text-xs" onClick={(e) => { e.stopPropagation(); copyToClipboard(val, showToast); }}><i className="fas fa-barcode mr-1"></i> {String(val).substring(0,10)}...</span> : <span className="text-gray-400 text-xs">Sem EAN</span> }
             ];
 
-            const crmColumns = [
-                { field: 'cliente', header: 'Cliente', render: (val) => <span className="font-bold">{val}</span> },
-                { field: 'canal', header: 'Canal' },
-                { field: 'status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val==='Resolvido'?'bg-green-100 text-green-700':'bg-orange-100 text-orange-700'}`}>{val || 'Aberto'}</span> }
-            ];
+            // --- CÁLCULOS DE PENDÊNCIAS ---
+            const atendimentosPendentes = (atendimentos || []).filter(a => a.status && !['Resolvido', 'Cancelado'].includes(a.status)).length;
+            const qualidadePendentes = (qualidade || []).filter(q => !q.status || !['Encerrado com Sucesso'].includes(q.status)).length;
+            const produtosPendentes = (produtos || []).filter(p => p.Status !== 'Ativo' || !p.SKU || !p['Título'] || !p['EAN/GTIN'] || !p['Peso (kg)'] || !p['Comprimento (cm)'] || !p['Largura (cm)'] || !p['Altura (cm)']).length;
+            const kitsPendentes = (kits || []).filter(k => k.Status !== 'Ativo' || !k.SKU || !k['Título'] || !k['EAN/GTIN'] || !k['Peso (kg)'] || !k['Comprimento (cm)'] || !k['Largura (cm)'] || !k['Altura (cm)']).length;
+            const fretesPendentes = (fretes || []).filter(f => !f.city || !f.cepStart || !f.cepEnd || !f.price).length;
+            const tarefasPendentes = (tarefas || []).filter(t => t.status !== 'Concluída').length;
 
-            if (authLoading) return (
-                <div className="flex flex-col items-center justify-center h-screen bg-gray-50 dark:bg-slate-900 text-mercantil-blue">
-                    <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-16 w-16 mb-4"></div>
-                    <h2 className="text-xl font-bold">Autenticando na Nuvem...</h2>
-                </div>
-            );
+            // --- TELAS ---
+            const Dashboard = () => {
+                const chamadosAbertos = atendimentosPendentes;
+                return (
+                    <div className="fade-in space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 flex items-center gap-4 border-l-4 border-l-mercantil-blue">
+                                <div className="p-4 bg-blue-50 dark:bg-slate-700 text-mercantil-blue dark:text-blue-400 rounded-lg"><i className="fas fa-box text-2xl"></i></div>
+                                <div><p className="text-gray-500 dark:text-gray-400 text-sm font-bold">Peças no Catálogo</p><h2 className="text-3xl font-bold dark:text-white">{(produtos || []).length}</h2></div>
+                            </div>
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 flex items-center gap-4 border-l-4 border-l-mercantil-orange">
+                                <div className="p-4 bg-orange-50 dark:bg-slate-700 text-mercantil-orange dark:text-orange-400 rounded-lg"><i className="fas fa-boxes-stacked text-2xl"></i></div>
+                                <div><p className="text-gray-500 dark:text-gray-400 text-sm font-bold">Kits Comerciais</p><h2 className="text-3xl font-bold dark:text-white">{(kits || []).length}</h2></div>
+                            </div>
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 flex items-center gap-4 border-l-4 border-l-red-500">
+                                <div className="p-4 bg-red-50 dark:bg-slate-700 text-red-500 rounded-lg"><i className="fas fa-headset text-2xl"></i></div>
+                                <div><p className="text-gray-500 dark:text-gray-400 text-sm font-bold">CRM: Pendentes</p><h2 className="text-3xl font-bold dark:text-white">{chamadosAbertos}</h2></div>
+                            </div>
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 flex items-center gap-4 border-l-4 border-l-green-500">
+                                <div className="p-4 bg-green-50 dark:bg-slate-700 text-green-500 rounded-lg"><i className="fas fa-check-square text-2xl"></i></div>
+                                <div><p className="text-gray-500 dark:text-gray-400 text-sm font-bold">Tarefas Abertas</p><h2 className="text-3xl font-bold dark:text-white">{tarefasPendentes}</h2></div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 p-6">
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4 border-b dark:border-slate-700 pb-2"><i className="fas fa-bolt text-mercantil-orange mr-2"></i>Atalhos Rápidos</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button onClick={() => { setActiveMenu('fretes'); setIsSidebarOpen(false); }} className="p-4 border dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-left transition flex flex-col items-center justify-center text-mercantil-blue dark:text-blue-400 font-bold">
+                                        <i className="fas fa-truck text-3xl mb-2"></i> Calcular Frete
+                                    </button>
+                                    <button onClick={() => { setActiveMenu('tarefas'); setIsSidebarOpen(false); }} className="p-4 border dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 text-left transition flex flex-col items-center justify-center text-mercantil-orange dark:text-orange-400 font-bold">
+                                        <i className="fas fa-tasks text-3xl mb-2"></i> Ver Tarefas
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 p-6">
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4 border-b dark:border-slate-700 pb-2"><i className="fas fa-shield-alt text-mercantil-blue mr-2"></i>Status do Sistema</h3>
+                                <ul className="space-y-3 text-sm dark:text-slate-300">
+                                    <li className="flex justify-between items-center"><span>Modo Noturno (Dark)</span><span className="font-bold">{darkMode ? 'Ativado' : 'Desativado'}</span></li>
+                                    <li className="flex justify-between items-center"><span>Status do Banco Local</span><span className="text-green-600 dark:text-green-400 font-bold"><i className="fas fa-check"></i> Seguro e Operante</span></li>
+                                    <li className="flex justify-between items-center p-2 bg-gray-50 dark:bg-slate-900 rounded border dark:border-slate-700 mt-2">
+                                        <span className="text-mercantil-orange font-bold"><i className="fas fa-cloud-upload-alt mr-2"></i>Último Backup 100%:</span>
+                                        <span className="font-mono text-xs">{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nenhum backup gerado'}</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const ImportExport = () => {
+                const forceBackupNow = () => {
+                    const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas, notas };
+                    localStorage.setItem('mrc_auto_backup_dump', JSON.stringify(fullSystemDump));
+                    setLastBackup(new Date().toISOString());
+                    showToast('Backup manual gravado com sucesso no navegador.', 'success');
+                };
+
+                const downloadBackup = () => {
+                    const data = localStorage.getItem('mrc_auto_backup_dump');
+                    if(!data) { showToast('Gere um backup primeiro clicando no botão ao lado!', 'error'); return; }
+                    const blob = new Blob([data], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = `Mercantil_ERP_Backup_${new Date().toISOString().split('T')[0]}.json`;
+                    link.click();
+                    showToast('Download do backup concluído.');
+                };
+
+                const handleRestoreJSON = (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        try {
+                            const data = JSON.parse(evt.target.result);
+                            
+                            if (data.produtos || data.kits || data.fretes || data.atendimentos || data.tarefas || data.notas) {
+                                if (window.confirm("ATENÇÃO CRÍTICA: Restaurar um backup irá APAGAR E SUBSTITUIR todos os dados atuais do sistema pelo conteúdo deste arquivo. Tem certeza absoluta?")) {
+                                    if(data.produtos) setProdutos(data.produtos);
+                                    if(data.kits) setKits(data.kits);
+                                    if(data.atendimentos) setAtendimentos(data.atendimentos);
+                                    if(data.qualidade) setQualidade(data.qualidade);
+                                    if(data.marketing) setMarketing(data.marketing);
+                                    if(data.gerencia) setGerencia(data.gerencia);
+                                    if(data.compliance) setCompliance(data.compliance);
+                                    if(data.fretes) setFretes(data.fretes);
+                                    if(data.tarefas) setTarefas(data.tarefas);
+                                    if(data.notas) setNotas(data.notas);
+                                    
+                                    showToast("Sistema restaurado com sucesso! Dados sincronizados.", "success");
+                                }
+                            } else {
+                                showToast("Arquivo JSON não reconhecido pelo sistema Mercantil ERP.", "error");
+                            }
+                        } catch(err) {
+                            showToast("Erro ao processar o arquivo. JSON inválido ou corrompido.", "error");
+                            console.error(err);
+                        }
+                    };
+                    reader.readAsText(file);
+                    e.target.value = '';
+                };
+
+                return (
+                    <div className="fade-in space-y-6">
+                        <h2 className="text-2xl font-bold text-mercantil-dark dark:text-white mb-6 border-b dark:border-slate-700 pb-2"><i className="fas fa-database text-gray-600 dark:text-gray-400 mr-2"></i> Segurança e Base de Dados</h2>
+                        
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 col-span-1 lg:col-span-2">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xl font-bold text-gray-800 dark:text-white"><i className="fas fa-file-excel text-mercantil-orange mr-2"></i>Importação Universal (XLSX, XLS, CSV)</h3>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="border dark:border-slate-700 p-4 rounded-lg bg-gray-50 dark:bg-slate-900 flex flex-col justify-between">
+                                        <div>
+                                            <h4 className="font-bold text-mercantil-blue dark:text-blue-400 mb-2">Produtos / Peças</h4>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Carregue sua planilha de peças. Compatível com Excel (.xlsx) e CSV.</p>
+                                        </div>
+                                        <label className="flex items-center justify-center gap-2 w-full p-3 border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg hover:bg-blue-50 dark:hover:bg-slate-800 hover:border-mercantil-blue cursor-pointer transition text-gray-600 dark:text-gray-300 font-medium">
+                                            <i className="fas fa-upload text-mercantil-blue dark:text-blue-400"></i> Importar Planilha de Peças
+                                            <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={e => handleUploadUniversal(e, 'produtos')} />
+                                        </label>
+                                    </div>
+                                    <div className="border dark:border-slate-700 p-4 rounded-lg bg-gray-50 dark:bg-slate-900 flex flex-col justify-between">
+                                        <div>
+                                            <h4 className="font-bold text-mercantil-orange dark:text-orange-400 mb-2">Kits Comerciais</h4>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Carregue as combinações de kits. Compatível com Excel (.xlsx) e CSV.</p>
+                                        </div>
+                                        <label className="flex items-center justify-center gap-2 w-full p-3 border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg hover:bg-orange-50 dark:hover:bg-slate-800 hover:border-mercantil-orange cursor-pointer transition text-gray-600 dark:text-gray-300 font-medium">
+                                            <i className="fas fa-upload text-mercantil-orange dark:text-orange-400"></i> Importar Planilha de Kits
+                                            <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={e => handleUploadUniversal(e, 'kits')} />
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700">
+                                <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2"><i className="fas fa-shield-check text-green-500 mr-2"></i>Gerenciar Backups</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">O sistema salva os dados automaticamente a cada 30 minutos. Exporte o arquivo JSON para segurança extrema.</p>
+                                
+                                <div className="p-4 bg-gray-50 dark:bg-slate-900 border dark:border-slate-700 rounded-lg mb-6 flex flex-col gap-2">
+                                    <div className="text-sm dark:text-slate-300"><strong>Último Backup Automático:</strong></div>
+                                    <div className="text-mercantil-blue dark:text-blue-400 font-mono text-lg">{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nenhum backup gerado'}</div>
+                                </div>
+
+                                <div className="flex gap-3 mb-4">
+                                    <button onClick={forceBackupNow} className="flex-1 bg-mercantil-dark text-white p-3 rounded-lg hover:bg-black font-bold shadow transition"><i className="fas fa-save mr-2"></i> Forçar Backup</button>
+                                    <button onClick={downloadBackup} className="flex-1 bg-green-600 text-white p-3 rounded-lg hover:bg-green-800 font-bold shadow transition"><i className="fas fa-file-download mr-2"></i> Baixar JSON Base</button>
+                                </div>
+
+                                <div className="border-t dark:border-slate-700 pt-4 mt-2">
+                                    <label className="flex items-center justify-center gap-2 w-full p-3 bg-blue-50 dark:bg-slate-700 text-mercantil-blue dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-slate-600 cursor-pointer transition font-bold shadow-sm">
+                                        <i className="fas fa-cloud-upload-alt text-lg"></i> Restaurar Backup (.json)
+                                        <input type="file" accept=".json" className="hidden" onChange={handleRestoreJSON} />
+                                    </label>
+                                    <p className="text-xs text-center text-gray-500 mt-2">Irá sobrescrever a base inteira com o arquivo escolhido.</p>
+                                </div>
+                            </div>
+
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
+                                <div className="w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-4xl mb-4"><i className="fas fa-exclamation-triangle"></i></div>
+                                <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Zona de Perigo</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Esta ação destruirá o banco de dados inteiro deste navegador. Faça o download do backup antes para não perder nada.</p>
+                                <button onClick={() => {
+                                    if(window.confirm('TEM CERTEZA ABSOLUTA? Isso apagará CRM, Peças, Qualidade, Tarefas, TUDO.')) {
+                                        localStorage.clear(); window.location.reload();
+                                    }
+                                }} className="bg-red-600 text-white px-6 py-2 rounded shadow hover:bg-red-800 transition font-bold">Resetar Todo o ERP</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const MenuItem = ({ id, icon, label, badge }) => {
+                const isActive = activeMenu === id;
+                return (
+                    <button onClick={() => { setActiveMenu(id); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${isActive ? 'bg-blue-50 dark:bg-slate-800 text-mercantil-blue dark:text-blue-400 border-l-4 border-mercantil-orange font-bold' : 'text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white border-l-4 border-transparent font-medium'}`}>
+                        <div className="flex items-center gap-3">
+                            <i className={`${icon} w-5 text-center text-lg ${isActive ? 'text-mercantil-orange' : ''}`}></i>
+                            <span className="text-sm">{label}</span>
+                        </div>
+                        {badge !== undefined && badge > 0 && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${isActive ? 'bg-mercantil-blue text-white' : 'bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-slate-300'}`}>{badge}</span>
+                        )}
+                    </button>
+                );
+            };
 
             return (
-                <div className={`${darkMode ? 'dark' : ''}`}>
-                    <div className="flex h-screen overflow-hidden dark:bg-slate-900 font-sans text-gray-800 dark:text-slate-200 w-full">
-                        {toast.visible && (
-                            <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-xl text-white font-bold fade-in flex items-center gap-3 ${toast.type==='success'?'bg-green-600':toast.type==='error'?'bg-red-600':'bg-blue-600'}`}>
-                                {toast.message}
+                <div className="flex h-screen overflow-hidden dark:bg-slate-900 font-sans text-gray-800 dark:text-slate-200 w-full">
+                    {toast.visible && (
+                        <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-xl text-white font-bold fade-in flex items-center gap-3 ${toast.type==='success'?'bg-green-600':toast.type==='info'?'bg-blue-600':'bg-red-600'}`}>
+                            <i className={`fas ${toast.type==='success'?'fa-check-circle':toast.type==='info'?'fa-info-circle':'fa-exclamation-triangle'} text-xl`}></i>
+                            {toast.message}
+                        </div>
+                    )}
+
+                    {/* Fundo escuro ao abrir o menu mobile */}
+                    {isSidebarOpen && (
+                        <div 
+                            className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden" 
+                            onClick={() => setIsSidebarOpen(false)}
+                        ></div>
+                    )}
+
+                    {/* Barra Lateral Responsiva */}
+                    <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 shadow-xl md:shadow-none transform transition-transform duration-300 ease-in-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
+                        <div className="p-6 border-b border-gray-200 dark:border-slate-700 flex items-center gap-3">
+                            <LogoMercantil />
+                            <div>
+                                <h1 className="font-extrabold text-mercantil-blue dark:text-blue-400 tracking-tight leading-none text-xl">MERCANTIL</h1>
+                                <span className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest font-bold">Distribuidora ERP</span>
                             </div>
-                        )}
+                        </div>
+                        <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scroll w-full">
+                            <MenuItem id="painel" icon="fas fa-chart-pie" label="Painel Geral" />
+                            
+                            <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Produtividade</p></div>
+                            <MenuItem id="tarefas" icon="fas fa-check-square" label="Tarefas (Kanban)" badge={tarefasPendentes} />
+                            <MenuItem id="notas" icon="fas fa-sticky-note" label="Bloco de Notas" />
 
-                        {/* Barra Lateral Ocultável no Mobile */}
-                        {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden" onClick={() => setIsSidebarOpen(false)}></div>}
-                        
-                        <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 shadow-xl transform transition-transform duration-300 md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                            <div className="p-6 border-b border-gray-200 dark:border-slate-700 flex items-center gap-3">
-                                <LogoMercantil />
-                                <div>
-                                    <h1 className="font-extrabold text-mercantil-blue dark:text-blue-400 text-xl">MERCANTIL</h1>
-                                    <span className="text-[10px] text-green-500 font-bold"><i className="fas fa-cloud"></i> Cloud Sync Ativo</span>
-                                </div>
+                            <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Comercial</p></div>
+                            <MenuItem id="produtos" icon="fas fa-box" label="Peças & Motores" badge={produtosPendentes} />
+                            <MenuItem id="kits" icon="fas fa-boxes-stacked" label="Kits Montados" badge={kitsPendentes} />
+                            <MenuItem id="fretes" icon="fas fa-truck" label="Gestão de Fretes" badge={fretesPendentes} />
+                            
+                            <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Atendimento & Qualidade</p></div>
+                            <MenuItem id="crm" icon="fas fa-headset" label="CRM Integrado" badge={atendimentosPendentes} />
+                            <MenuItem id="qualidade" icon="fas fa-medal" label="Qualidade & NCs" badge={qualidadePendentes} />
+                            
+                            <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Administração</p></div>
+                            <MenuItem id="marketing" icon="fas fa-bullhorn" label="Marketing" />
+                            <MenuItem id="gerencia" icon="fas fa-briefcase" label="Gerência Interna" />
+                            <MenuItem id="compliance" icon="fas fa-shield-alt" label="Compliance" />
+
+                            <div className="pt-4 pb-1"><p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Sistema</p></div>
+                            <MenuItem id="dados" icon="fas fa-database" label="Dados & Backup" />
+                        </nav>
+                        <div className="p-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-center text-xs text-gray-500 font-medium">
+                            Versão 3.2 (Kanban+ Notas Integradas)
+                        </div>
+                    </aside>
+
+                    {/* Cabeçalho Mobile */}
+                    <div className="md:hidden fixed top-0 left-0 right-0 bg-white dark:bg-slate-800 border-b dark:border-slate-700 z-30 p-4 flex justify-between items-center shadow-sm w-full">
+                        <div className="flex items-center gap-3">
+                            <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600 dark:text-gray-300 focus:outline-none p-1">
+                                <i className="fas fa-bars text-2xl"></i>
+                            </button>
+                            <div className="font-extrabold text-mercantil-blue dark:text-blue-400 text-lg flex items-center gap-2">
+                                <LogoMercantil /> MERCANTIL
                             </div>
-                            <nav className="flex-1 p-4 space-y-2">
-                                {[
-                                    { id: 'painel', icon: 'fa-chart-pie', label: 'Painel Geral' },
-                                    { id: 'produtos', icon: 'fa-box', label: 'Peças & Motores' },
-                                    { id: 'kits', icon: 'fa-boxes-stacked', label: 'Kits Montados' },
-                                    { id: 'crm', icon: 'fa-headset', label: 'Atendimento CRM' },
-                                    { id: 'config', icon: 'fa-cog', label: 'Instruções GitHub' }
-                                ].map(item => (
-                                    <button key={item.id} onClick={() => { setActiveMenu(item.id); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${activeMenu === item.id ? 'bg-blue-50 dark:bg-slate-700 text-mercantil-blue dark:text-blue-400 border-l-4 border-mercantil-orange' : 'text-gray-600 dark:text-slate-400 hover:bg-gray-100'}`}>
-                                        <i className={`fas ${item.icon} w-5`}></i> {item.label}
-                                    </button>
-                                ))}
-                            </nav>
-                        </aside>
-
-                        <main className="flex-1 flex flex-col h-full overflow-hidden w-full relative">
-                            {/* Header (Desktop & Mobile) */}
-                            <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 p-4 flex justify-between items-center shadow-sm z-10 w-full">
-                                <div className="flex items-center gap-3">
-                                    <button onClick={() => setIsSidebarOpen(true)} className="md:hidden text-gray-600 text-xl"><i className="fas fa-bars"></i></button>
-                                    <h2 className="text-xl font-bold capitalize"><i className="fas fa-cloud text-blue-500 mr-2"></i> {activeMenu}</h2>
-                                </div>
-                                <button onClick={() => setDarkMode(!darkMode)} className="text-xl p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700"><i className={`fas ${darkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-slate-600'}`}></i></button>
-                            </header>
-
-                            <div className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scroll w-full bg-gray-50 dark:bg-slate-900">
-                                {activeMenu === 'painel' && (
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 fade-in">
-                                        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border-l-4 border-mercantil-blue shadow-sm">
-                                            <p className="text-sm font-bold text-gray-500">Peças na Nuvem</p>
-                                            <h2 className="text-3xl font-bold">{loadProd ? '...' : produtos.length}</h2>
-                                        </div>
-                                        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border-l-4 border-mercantil-orange shadow-sm">
-                                            <p className="text-sm font-bold text-gray-500">Kits Comerciais</p>
-                                            <h2 className="text-3xl font-bold">{loadKits ? '...' : kits.length}</h2>
-                                        </div>
-                                        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border-l-4 border-green-500 shadow-sm">
-                                            <p className="text-sm font-bold text-gray-500">Chamados CRM</p>
-                                            <h2 className="text-3xl font-bold">{loadCrm ? '...' : atendimentos.length}</h2>
-                                        </div>
-                                        <div className="md:col-span-3 bg-blue-50 dark:bg-slate-800 p-6 rounded-xl border border-blue-200 dark:border-slate-700 mt-4">
-                                            <h3 className="text-xl font-bold text-blue-800 dark:text-blue-300 mb-2"><i className="fas fa-wifi mr-2"></i> Sistema Real-Time Ativado</h3>
-                                            <p className="text-blue-900 dark:text-blue-200">Se você abrir este sistema em duas abas ou computadores diferentes, verá que, ao adicionar uma peça em um, ela aparecerá quase instantaneamente no outro. Os dados estão seguros na nuvem.</p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {activeMenu === 'produtos' && <BaseManager title="Peças" icon="fas fa-box" data={produtos} loading={loadProd} columns={catalogColumns} formConfig={produtosConfig} onSave={saveProduto} onDelete={delProduto} showToast={showToast} />}
-                                {activeMenu === 'kits' && <BaseManager title="Kits" icon="fas fa-boxes-stacked" data={kits} loading={loadKits} columns={catalogColumns} formConfig={produtosConfig} onSave={saveKit} onDelete={delKit} showToast={showToast} />}
-                                {activeMenu === 'crm' && <BaseManager title="CRM" icon="fas fa-headset" data={atendimentos} loading={loadCrm} columns={crmColumns} formConfig={crmConfig} onSave={saveCrm} onDelete={delCrm} showToast={showToast} />}
-                                
-                                {activeMenu === 'config' && (
-                                    <div className="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 max-w-4xl mx-auto fade-in">
-                                        <h2 className="text-2xl font-bold mb-4 text-mercantil-orange"><i className="fas fa-rocket mr-2"></i>Como colocar isso no seu GitHub</h2>
-                                        <p className="mb-4">Para que este código funcione no seu site (mercantilpecas.github.io/sistema/), você precisa criar o seu próprio banco de dados gratuito no Google Firebase e colocar as chaves no código acima.</p>
-                                        
-                                        <ol className="list-decimal pl-5 space-y-4 font-medium text-gray-700 dark:text-gray-300">
-                                            <li>Acesse <a href="https://firebase.google.com/" target="_blank" className="text-blue-500 underline">firebase.google.com</a> e crie uma conta (use o seu Gmail).</li>
-                                            <li>Clique em <strong>"Go to console"</strong> e depois em <strong>"Adicionar Projeto"</strong>. Dê o nome de "Mercantil ERP".</li>
-                                            <li>No menu lateral esquerdo, clique em <strong>Firestore Database</strong> e depois em <strong>Criar banco de dados</strong>. Escolha <strong>"Iniciar no modo de teste"</strong> (Isso permite que você leia e grave dados inicialmente).</li>
-                                            <li>Ainda no menu lateral, vá em <strong>Autenticação (Authentication)</strong> -> <strong>Vamos começar</strong> -> Aba <strong>Sign-in method</strong>. Ative o provedor <strong>"Anônimo"</strong>. (Isso permite que o sistema conecte sem pedir senha aos seus funcionários).</li>
-                                            <li>Volte à tela inicial do seu projeto Firebase (clique no ícone da casinha no canto superior esquerdo). Clique no ícone de <strong>Web (</>)</strong> para adicionar um aplicativo à web.</li>
-                                            <li>Registre o app com o nome "Mercantil Web". O Firebase vai te mostrar um código cheio de chaves (apiKey, authDomain, projectId...).</li>
-                                            <li><strong>Copie essas chaves!</strong> Vá no código deste arquivo <code>index.html</code> que eu gerei para você. Procure pela linha onde está escrito <code>const myFirebaseConfig = { apiKey: "SUA_API_KEY", ... }</code> e substitua pelas suas chaves verdadeiras.</li>
-                                            <li>Salve o arquivo <code>index.html</code> e faça o upload/commit dele no seu repositório do GitHub! Pronto, o sistema está online e colaborativo.</li>
-                                        </ol>
-                                    </div>
-                                )}
-                            </div>
-                        </main>
+                        </div>
+                        <button onClick={() => setDarkMode(!darkMode)} className="text-xl p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 transition" title="Alternar Tema">
+                            <i className={`fas ${darkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-slate-600'}`}></i>
+                        </button>
                     </div>
+
+                    <main className="flex-1 flex flex-col h-full overflow-hidden mt-[72px] md:mt-0 relative w-full">
+                        <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 p-4 sm:px-8 hidden md:flex justify-between items-center shadow-sm z-10 w-full">
+                            <h2 className="text-2xl font-bold text-gray-800 dark:text-white capitalize flex items-center gap-2">
+                                {activeMenu === 'dados' ? 'Segurança e Dados' : activeMenu.replace('-', ' ')}
+                            </h2>
+                            <div className="flex items-center gap-5">
+                                <button onClick={() => setDarkMode(!darkMode)} className="text-xl p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 transition" title="Alternar Tema">
+                                    <i className={`fas ${darkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-slate-600'}`}></i>
+                                </button>
+                                <a href="https://mercantilpecas.com.br/" target="_blank" rel="noreferrer" className="text-sm text-gray-500 dark:text-gray-300 hover:text-mercantil-orange transition font-bold"><i className="fas fa-globe mr-1"></i> Site Oficial</a>
+                                <div className="h-9 w-9 rounded-full bg-mercantil-blue text-white flex items-center justify-center font-bold shadow-md cursor-pointer border-2 border-white dark:border-slate-600 shrink-0">
+                                    <i className="fas fa-user-tie"></i>
+                                </div>
+                            </div>
+                        </header>
+
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scroll w-full">
+                            {activeMenu === 'painel' && <Dashboard />}
+                            
+                            {activeMenu === 'tarefas' && (
+                                <TarefasManager 
+                                    tarefas={tarefas} setTarefas={setTarefas} showToast={showToast} 
+                                    db={{ produtos, kits, atendimentos, qualidade, fretes, marketing }} 
+                                />
+                            )}
+                            
+                            {activeMenu === 'notas' && (
+                                <NotasManager 
+                                    notas={notas} setNotas={setNotas} showToast={showToast} 
+                                    db={{ produtos, kits, atendimentos, qualidade, fretes, marketing }} 
+                                />
+                            )}
+
+                            {activeMenu === 'crm' && (
+                                <BaseManager title="Gestão de Atendimento Integrada (CRM)" icon="fas fa-headset" data={atendimentos} formConfig={crmConfig} showToast={showToast}
+                                    onValidate={(data) => { if(!data.protocolo) { showToast('Obrigatório gerar o Protocolo de Atendimento oficial antes de salvar!', 'error'); return false; } return true; }}
+                                    onSave={(data) => saveStateRecord(data, atendimentos, setAtendimentos)} onDelete={(id) => deleteStateRecord(id, atendimentos, setAtendimentos)}
+                                    columns={[ { field: 'protocolo', header: 'Protocolo', render: (val) => <span className="font-mono text-mercantil-blue dark:text-blue-400">{val}</span> }, { field: 'pedido', header: 'Pedido', render: (val) => <span className="font-bold text-xs">{val || '-'}</span> }, { field: 'cliente', header: 'Cliente' }, { field: 'canal', header: 'Canal' }, { field: 'status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val && val.includes('Resolvido') ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{val}</span> } ]} />
+                            )}
+
+                            {activeMenu === 'qualidade' && (
+                                <BaseManager title="Gestão de Qualidade & NCs" icon="fas fa-medal" data={qualidade} formConfig={qualidadeConfig} showToast={showToast}
+                                    onSave={(data) => saveStateRecord(data, qualidade, setQualidade)} onDelete={(id) => deleteStateRecord(id, qualidade, setQualidade)}
+                                    columns={[ { field: 'data', header: 'Data' }, { field: 'tipo', header: 'Tipo/Indicador' }, { field: 'protocolo', header: 'Protocolo Ref.', render: (val) => val ? <span className="font-mono text-xs">{val}</span> : '-' }, { field: 'status', header: 'Status', render: (val) => <span className="font-bold text-xs uppercase text-gray-500 dark:text-gray-400">{val}</span> } ]} />
+                            )}
+
+                            {activeMenu === 'marketing' && (
+                                <BaseManager title="Planejamento de Marketing" icon="fas fa-bullhorn" data={marketing} formConfig={marketingConfig} showToast={showToast}
+                                    onSave={(data) => saveStateRecord(data, marketing, setMarketing)} onDelete={(id) => deleteStateRecord(id, marketing, setMarketing)}
+                                    columns={[ { field: 'data', header: 'Data Prevista' }, { field: 'plataforma', header: 'Canal Mídia' }, { field: 'tipo', header: 'Formato' }, { field: 'status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val==='Publicado'?'bg-blue-100 text-blue-700':'bg-gray-200 text-gray-700'}`}>{val}</span> } ]} />
+                            )}
+
+                            {activeMenu === 'gerencia' && (
+                                <BaseManager title="Área da Gerência (Registros Internos)" icon="fas fa-briefcase" data={gerencia} formConfig={gerenciaConfig} showToast={showToast}
+                                    onSave={(data) => saveStateRecord(data, gerencia, setGerencia)} onDelete={(id) => deleteStateRecord(id, gerencia, setGerencia)}
+                                    columns={[ { field: 'data', header: 'Data' }, { field: 'tipo', header: 'Categoria' }, { field: 'titulo', header: 'Assunto' } ]} />
+                            )}
+
+                            {activeMenu === 'compliance' && (
+                                <BaseManager title="Políticas & Compliance" icon="fas fa-shield-alt" data={compliance} formConfig={complianceConfig} showToast={showToast}
+                                    onSave={(data) => saveStateRecord(data, compliance, setCompliance)} onDelete={(id) => deleteStateRecord(id, compliance, setCompliance)}
+                                    columns={[ { field: 'codigo', header: 'Código', render: (val) => <span className="font-mono text-mercantil-orange">{val}</span> }, { field: 'titulo', header: 'Título Documento' }, { field: 'dataRev', header: 'Última Revisão' }, { field: 'status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val==='Vigente (Aprovada)'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}`}>{val}</span> } ]} />
+                            )}
+
+                            {activeMenu === 'produtos' && (
+                                <BaseManager title="Catálogo de Peças (Produtos)" icon="fas fa-box" data={produtos} formConfig={produtosConfig} showToast={showToast}
+                                    onSave={(data) => saveStateRecord(data, produtos, setProdutos)} onDelete={(id) => deleteStateRecord(id, produtos, setProdutos)}
+                                    columns={catalogColumns} />
+                            )}
+
+                            {activeMenu === 'kits' && (
+                                <BaseManager title="Catálogo de Kits" icon="fas fa-boxes-stacked" data={kits} formConfig={kitsConfig} showToast={showToast}
+                                    onSave={(data) => saveStateRecord(data, kits, setKits)} onDelete={(id) => deleteStateRecord(id, kits, setKits)}
+                                    columns={catalogColumns} />
+                            )}
+                            
+                            {activeMenu === 'fretes' && (
+                                <FretesManager data={fretes} onSaveData={setFretes} showToast={showToast} />
+                            )}
+
+                            {activeMenu === 'dados' && <ImportExport />}
+                        </div>
+                    </main>
                 </div>
             );
         };
