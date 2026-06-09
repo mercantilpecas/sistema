@@ -137,6 +137,74 @@
             }
         };
 
+        // --- COMPONENTE CUSTOMIZADO PARA MÚLTIPLOS VÍNCULOS COMERCIAIS (PRODUTOS/KITS) ---
+        const ItensVinculadosManager = ({ value = [], onChange, produtosOptions = [], kitsOptions = [] }) => {
+            const [tipo, setTipo] = useState('Produto');
+            const [selecionado, setSelecionado] = useState('');
+            const [qtd, setQtd] = useState(1);
+
+            const handleAdd = () => {
+                if (!selecionado || qtd <= 0) return;
+                const newVal = [...(Array.isArray(value) ? value : []), { tipo, item: selecionado, qtd }];
+                onChange(newVal);
+                setSelecionado('');
+                setQtd(1);
+            };
+
+            const handleRemove = (idx) => {
+                const newVal = (Array.isArray(value) ? value : []).filter((_, i) => i !== idx);
+                onChange(newVal);
+            };
+
+            const options = tipo === 'Produto' ? produtosOptions : kitsOptions;
+
+            return (
+                <div className="border border-gray-200 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-slate-800 shadow-sm mt-1">
+                    <div className="flex flex-wrap gap-2 mb-3">
+                        {(Array.isArray(value) ? value : []).map((v, i) => (
+                            <span key={i} className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md text-xs font-bold text-gray-700 dark:text-gray-200 shadow-sm transition">
+                                <span className={v.tipo === 'Produto' ? 'text-mercantil-blue dark:text-blue-400' : 'text-mercantil-orange dark:text-orange-400'}>
+                                    <i className={v.tipo === 'Produto' ? 'fas fa-box mr-1' : 'fas fa-boxes-stacked mr-1'}></i>{v.tipo}:
+                                </span>
+                                <span className="truncate max-w-[250px]" title={v.item}>{v.item}</span>
+                                <span className="bg-gray-200 dark:bg-slate-600 px-2 py-0.5 rounded-full text-mercantil-dark dark:text-white">Qtd: {v.qtd}</span>
+                                <button type="button" onClick={() => handleRemove(i)} className="text-red-500 hover:text-red-700 transition ml-1"><i className="fas fa-times-circle"></i></button>
+                            </span>
+                        ))}
+                        {(Array.isArray(value) ? value : []).length === 0 && (
+                            <span className="text-xs text-gray-400 dark:text-gray-500 italic">Nenhum item adicionado até o momento.</span>
+                        )}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50 dark:bg-slate-900 p-3 rounded-lg border border-gray-200 dark:border-slate-700">
+                        <div className="md:col-span-3">
+                            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Tipo de Item</label>
+                            <select value={tipo} onChange={e => {setTipo(e.target.value); setSelecionado('');}} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm">
+                                <option value="Produto">Produto / Peça</option>
+                                <option value="Kit">Kit Montado</option>
+                            </select>
+                        </div>
+                        <div className="md:col-span-6">
+                            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Selecione o {tipo}</label>
+                            <select value={selecionado} onChange={e => setSelecionado(e.target.value)} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm">
+                                <option value="">Selecione na lista...</option>
+                                {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                            </select>
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Quantidade</label>
+                            <input type="number" min="1" value={qtd} onChange={e => setQtd(parseInt(e.target.value)||1)} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm" />
+                        </div>
+                        <div className="md:col-span-1">
+                            <button type="button" onClick={handleAdd} disabled={!selecionado} className="w-full bg-mercantil-blue text-white p-2 rounded hover:bg-blue-800 disabled:bg-gray-400 disabled:dark:bg-slate-700 flex items-center justify-center transition shadow-sm h-[38px]" title="Adicionar à lista">
+                                <i className="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         // --- COMPONENTES UI COMPARTILHADOS ---
         const Modal = ({ title, children, onClose, onSave, extraButtons }) => (
             <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 fade-in p-4 backdrop-blur-sm">
@@ -167,7 +235,6 @@
                 <form onSubmit={e => { e.preventDefault(); onSave(data); }} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         {config.map(f => {
-                            // Calcula a largura da coluna no grid (full=4, threeQuarters=3, half=2, default=1)
                             const colClass = f.full ? 'col-span-1 md:col-span-4' : 
                                              f.threeQuarters ? 'col-span-1 md:col-span-3' : 
                                              f.half ? 'col-span-1 md:col-span-2' : 
@@ -175,23 +242,33 @@
                             return (
                                 <div key={f.name} className={colClass}>
                                     <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wider">{f.label}</label>
-                                    <div className="flex gap-2">
-                                        {f.type === 'select' ? (
-                                            <select required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})}>
-                                                <option value="">Selecione...</option>
-                                                {f.options && f.options.map((o, idx) => <option key={idx} value={o}>{o}</option>)}
-                                            </select>
-                                        ) : f.type === 'textarea' ? (
-                                            <textarea required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} rows="3" placeholder={f.placeholder || ''} />
-                                        ) : (
-                                            <input required={f.required} type={f.type||'text'} min={f.min} step={f.step} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} readOnly={f.readOnly} placeholder={f.placeholder || ''} />
-                                        )}
-                                        {f.button && (
-                                            <button type="button" onClick={() => f.action(setData)} className="bg-mercantil-blue text-white px-4 py-2 rounded shadow hover:bg-blue-800 whitespace-nowrap text-sm font-bold flex items-center transition">
-                                                <i className={`${f.icon || "fas fa-bolt"} mr-2`}></i> {f.button}
-                                            </button>
-                                        )}
-                                    </div>
+                                    
+                                    {f.type === 'vinculos_comerciais' ? (
+                                        <ItensVinculadosManager 
+                                            value={data[f.name]} 
+                                            onChange={v => setData({...data, [f.name]: v})} 
+                                            produtosOptions={f.produtos} 
+                                            kitsOptions={f.kits} 
+                                        />
+                                    ) : (
+                                        <div className="flex gap-2">
+                                            {f.type === 'select' ? (
+                                                <select required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})}>
+                                                    <option value="">Selecione...</option>
+                                                    {f.options && f.options.map((o, idx) => <option key={idx} value={o}>{o}</option>)}
+                                                </select>
+                                            ) : f.type === 'textarea' ? (
+                                                <textarea required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} rows="3" placeholder={f.placeholder || ''} />
+                                            ) : (
+                                                <input required={f.required} type={f.type||'text'} min={f.min} step={f.step} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} readOnly={f.readOnly} placeholder={f.placeholder || ''} />
+                                            )}
+                                            {f.button && (
+                                                <button type="button" onClick={() => f.action(setData)} className="bg-mercantil-blue text-white px-4 py-2 rounded shadow hover:bg-blue-800 whitespace-nowrap text-sm font-bold flex items-center transition">
+                                                    <i className={`${f.icon || "fas fa-bolt"} mr-2`}></i> {f.button}
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -204,46 +281,65 @@
             );
         };
 
-        // --- COMPONENTE TAREFAS (Atualizado: Múltiplos Vínculos e Responsável) ---
+        // --- COMPONENTE TAREFAS (Atualizado: Múltiplos Vínculos e Múltiplos Responsáveis) ---
         const TarefasManager = ({ tarefas, setTarefas, db, showToast }) => {
             const [modalData, setModalData] = useState(null);
             const [tempVinculos, setTempVinculos] = useState([]);
             const [currentVinculoTipo, setCurrentVinculoTipo] = useState('');
             const [currentVinculoId, setCurrentVinculoId] = useState('');
+            
+            // Estado para gerenciar os múltiplos responsáveis
+            const [responsaveis, setResponsaveis] = useState([]);
+            const [novoResponsavel, setNovoResponsavel] = useState('');
 
             const openTaskModal = (task = null) => {
                 if (task) {
                     setModalData(task);
                     let initialVinculos = task.vinculos ? [...task.vinculos] : [];
-                    // Retrocompatibilidade para tarefas antigas que tinham apenas 1 vínculo salvo
                     if (initialVinculos.length === 0 && task.vinculoTipo && task.vinculoId) {
                         initialVinculos.push({ tipo: task.vinculoTipo, id: task.vinculoId, label: task.vinculoId });
                     }
                     setTempVinculos(initialVinculos);
+                    
+                    // Lógica para carregar múltiplos responsáveis (e fallback legado)
+                    let resps = [];
+                    if (Array.isArray(task.responsaveis)) {
+                        resps = [...task.responsaveis];
+                    } else if (task.responsavel) {
+                        resps = [task.responsavel];
+                    }
+                    setResponsaveis(resps);
                 } else {
-                    setModalData({ status: 'Pendente', prioridade: 'Média', responsavel: '' });
+                    setModalData({ status: 'Pendente', prioridade: 'Média' });
                     setTempVinculos([]);
+                    setResponsaveis([]);
                 }
                 setCurrentVinculoTipo('');
                 setCurrentVinculoId('');
+                setNovoResponsavel('');
             };
 
             const addVinculo = () => {
                 if (!currentVinculoTipo || !currentVinculoId) return;
                 const option = getLinkOptions(currentVinculoTipo).find(o => o.id === currentVinculoId);
                 if (option) {
-                    // Impede duplicidade exata
                     if (!tempVinculos.some(v => v.tipo === currentVinculoTipo && v.id === currentVinculoId)) {
                         setTempVinculos([...tempVinculos, { tipo: currentVinculoTipo, id: currentVinculoId, label: option.label }]);
                     } else {
                         showToast('Este vínculo já foi adicionado a esta tarefa.', 'info');
                     }
                 }
-                setCurrentVinculoId(''); // Reseta só o ID para facilitar adicionar vários da mesma área
+                setCurrentVinculoId('');
             };
 
-            const removeVinculo = (index) => {
-                setTempVinculos(tempVinculos.filter((_, i) => i !== index));
+            const removeVinculo = (index) => setTempVinculos(tempVinculos.filter((_, i) => i !== index));
+
+            const addResponsavel = () => {
+                const nome = novoResponsavel.trim();
+                if (nome && !responsaveis.includes(nome)) {
+                    setResponsaveis([...responsaveis, nome]);
+                    setNovoResponsavel('');
+                }
             };
 
             const handleSave = (e) => {
@@ -254,12 +350,13 @@
                     ...data,
                     id: modalData.id || `TRF-${Date.now()}`,
                     dataCriacao: modalData.dataCriacao || new Date().toISOString(),
-                    vinculos: tempVinculos // Salva a lista de vínculos ilimitada
+                    vinculos: tempVinculos,
+                    responsaveis: responsaveis // Salva o array atualizado
                 };
 
-                // Limpa campos antigos para manter o banco limpo no novo formato
                 delete newTask.vinculoTipo;
                 delete newTask.vinculoId;
+                delete newTask.responsavel; // Limpa para forçar o uso do array 'responsaveis'
 
                 if (modalData.id) {
                     setTarefas(tarefas.map(t => t.id === modalData.id ? newTask : t));
@@ -300,10 +397,14 @@
                 const bgColors = { 'Pendente': 'bg-white dark:bg-slate-800', 'Em Andamento': 'bg-blue-50 dark:bg-slate-750', 'Concluída': 'bg-gray-100 dark:bg-slate-900 opacity-60' };
                 
                 let displayVinculos = task.vinculos || [];
-                // Retrocompatibilidade visual
                 if (displayVinculos.length === 0 && task.vinculoTipo && task.vinculoId) {
                     displayVinculos = [{ tipo: task.vinculoTipo, id: task.vinculoId, label: task.vinculoId }];
                 }
+
+                // Exibição amigável dos múltiplos responsáveis
+                const displayResponsaveis = task.responsaveis && task.responsaveis.length > 0 
+                    ? task.responsaveis 
+                    : (task.responsavel ? [task.responsavel] : []);
 
                 return (
                     <div className={`${bgColors[task.status]} rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 p-4 border-l-4 ${priorityColors[task.prioridade] || 'border-l-gray-400'} hover:shadow-md transition cursor-pointer relative group`} onClick={() => openTaskModal(task)}>
@@ -312,9 +413,13 @@
                             <span className="text-xs font-bold text-gray-400 whitespace-nowrap">{task.dataLimite ? new Date(task.dataLimite).toLocaleDateString() : ''}</span>
                         </div>
                         
-                        {task.responsavel && (
-                            <div className="text-[11px] font-bold text-mercantil-blue dark:text-blue-400 mb-2 flex items-center gap-1">
-                                <i className="fas fa-user-circle"></i> {task.responsavel}
+                        {displayResponsaveis.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                                {displayResponsaveis.map((resp, idx) => (
+                                    <div key={idx} className="text-[10px] font-bold text-mercantil-blue dark:text-blue-400 bg-blue-50 dark:bg-slate-700 px-1.5 py-0.5 rounded flex items-center gap-1 border border-blue-100 dark:border-slate-600">
+                                        <i className="fas fa-user-circle"></i> {resp}
+                                    </div>
+                                ))}
                             </div>
                         )}
 
@@ -382,15 +487,15 @@
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="md:col-span-2">
                                         <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Título da Tarefa *</label>
-                                        <input type="text" name="titulo" required defaultValue={modalData.titulo} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue dark:bg-slate-900 dark:border-slate-600 dark:text-white" placeholder="O que precisa ser feito?" />
+                                        <input type="text" name="titulo" required defaultValue={modalData.titulo} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" placeholder="O que precisa ser feito?" />
                                     </div>
                                     <div className="md:col-span-2">
                                         <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Descrição</label>
-                                        <textarea name="descricao" rows="3" defaultValue={modalData.descricao} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue dark:bg-slate-900 dark:border-slate-600 dark:text-white" placeholder="Detalhes da tarefa..."></textarea>
+                                        <textarea name="descricao" rows="3" defaultValue={modalData.descricao} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" placeholder="Detalhes da tarefa..."></textarea>
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Status</label>
-                                        <select name="status" defaultValue={modalData.status} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white">
+                                        <select name="status" defaultValue={modalData.status} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white">
                                             <option value="Pendente">Pendente</option>
                                             <option value="Em Andamento">Em Andamento</option>
                                             <option value="Concluída">Concluída</option>
@@ -398,19 +503,54 @@
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Prioridade</label>
-                                        <select name="prioridade" defaultValue={modalData.prioridade} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white">
+                                        <select name="prioridade" defaultValue={modalData.prioridade} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white">
                                             <option value="Baixa">Baixa</option>
                                             <option value="Média">Média</option>
                                             <option value="Alta">Alta</option>
                                         </select>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Responsável</label>
-                                        <input type="text" name="responsavel" defaultValue={modalData.responsavel} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue dark:bg-slate-900 dark:border-slate-600 dark:text-white" placeholder="Quem acompanha a tarefa?" />
+                                    
+                                    {/* MÚLTIPLOS RESPONSÁVEIS */}
+                                    <div className="md:col-span-1">
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Responsáveis</label>
+                                        {responsaveis.length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mb-2 p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg">
+                                                {responsaveis.map((resp, idx) => (
+                                                    <span key={idx} className="inline-flex items-center gap-1 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 text-mercantil-blue dark:text-blue-400 px-2 py-1 rounded text-xs font-bold shadow-sm">
+                                                        <i className="fas fa-user-circle"></i> {resp}
+                                                        <button type="button" onClick={() => setResponsaveis(responsaveis.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700 ml-1 focus:outline-none transition"><i className="fas fa-times-circle"></i></button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="text" 
+                                                value={novoResponsavel}
+                                                onChange={(e) => setNovoResponsavel(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        addResponsavel();
+                                                    }
+                                                }}
+                                                className="flex-1 border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" 
+                                                placeholder="Adicionar nome..." 
+                                            />
+                                            <button 
+                                                type="button" 
+                                                onClick={addResponsavel}
+                                                disabled={!novoResponsavel.trim()}
+                                                className="bg-mercantil-blue hover:bg-blue-800 disabled:bg-gray-400 disabled:dark:bg-slate-700 text-white px-3 py-2 rounded transition flex items-center justify-center shadow-sm"
+                                            >
+                                                <i className="fas fa-plus"></i>
+                                            </button>
+                                        </div>
                                     </div>
+
                                     <div>
                                         <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Prazo / Data Limite</label>
-                                        <input type="date" name="dataLimite" defaultValue={modalData.dataLimite} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue dark:bg-slate-900 dark:border-slate-600 dark:text-white" />
+                                        <input type="date" name="dataLimite" defaultValue={modalData.dataLimite} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" />
                                     </div>
                                     
                                     <div className="md:col-span-2 border-t border-gray-200 dark:border-slate-700 pt-5 mt-2">
@@ -430,7 +570,7 @@
                                         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50 dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-slate-700">
                                             <div className="md:col-span-4">
                                                 <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Módulo / Área</label>
-                                                <select value={currentVinculoTipo} onChange={(e) => { setCurrentVinculoTipo(e.target.value); setCurrentVinculoId(''); }} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm">
+                                                <select value={currentVinculoTipo} onChange={(e) => { setCurrentVinculoTipo(e.target.value); setCurrentVinculoId(''); }} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm">
                                                     <option value="">Selecione uma área...</option>
                                                     <option value="Produtos">Produtos / Peças</option>
                                                     <option value="Kits">Kits</option>
@@ -442,7 +582,7 @@
                                             </div>
                                             <div className="md:col-span-6">
                                                 <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Registro Específico</label>
-                                                <select value={currentVinculoId} onChange={(e) => setCurrentVinculoId(e.target.value)} disabled={!currentVinculoTipo} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm disabled:bg-gray-200 disabled:dark:bg-slate-700">
+                                                <select value={currentVinculoId} onChange={(e) => setCurrentVinculoId(e.target.value)} disabled={!currentVinculoTipo} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm disabled:bg-gray-200 disabled:dark:bg-slate-700">
                                                     <option value="">{currentVinculoTipo ? 'Selecione o registro...' : 'Escolha a área primeiro'}</option>
                                                     {currentVinculoTipo && getLinkOptions(currentVinculoTipo).map(opt => (
                                                         <option key={opt.id} value={opt.id}>{opt.label}</option>
@@ -490,7 +630,11 @@
                 const keysToExport = ['id', ...Array.from(new Set(data.flatMap(Object.keys))).filter(k => k !== 'id')];
                 const csvContent = [
                     keysToExport.join(','),
-                    ...data.map(item => keysToExport.map(k => `"${(item[k]||'').toString().replace(/"/g, '""')}"`).join(','))
+                    ...data.map(item => keysToExport.map(k => {
+                        let val = item[k];
+                        if (Array.isArray(val)) val = JSON.stringify(val);
+                        return `"${(val||'').toString().replace(/"/g, '""')}"`;
+                    }).join(','))
                 ].join('\n');
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement("a");
@@ -531,7 +675,7 @@
                             <tbody>
                                 {filtered.length === 0 ? <tr><td colSpan={columns.length + 1} className="text-center py-8 text-gray-500">Nenhum registro encontrado.</td></tr> :
                                 filtered.map((item, idx) => (
-                                    <tr key={item.id || idx} className="border-b dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-slate-700 transition">
+                                    <tr key={item.id || idx} className="border-b dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-slate-750 transition">
                                         {columns.map(c => (
                                             <td key={c.field} className="px-4 py-3 font-medium text-sm">
                                                 {c.render ? c.render(item[c.field], item) : item[c.field]}
@@ -841,7 +985,7 @@
             const [gerencia, setGerencia] = useLocalStorage('mrc_gerencia', []);
             const [compliance, setCompliance] = useLocalStorage('mrc_compliance', []);
             const [fretes, setFretes] = useLocalStorage('mrc_fretes', []);
-            const [tarefas, setTarefas] = useLocalStorage('mrc_tarefas', []); // NOVO ESTADO DE TAREFAS
+            const [tarefas, setTarefas] = useLocalStorage('mrc_tarefas', []);
             const [lastBackup, setLastBackup] = useLocalStorage('mrc_last_backup_time', null);
 
             useEffect(() => {
@@ -851,7 +995,6 @@
 
             useEffect(() => {
                 const forceSystemBackup = () => {
-                    // TAREFAS ADICIONADAS AO DUMP GERAL E AUTOMÁTICO
                     const fullSystemDump = { produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, tarefas };
                     localStorage.setItem('mrc_auto_backup_dump', JSON.stringify(fullSystemDump));
                     setLastBackup(new Date().toISOString());
@@ -957,12 +1100,8 @@
                 { name: 'pedido', label: 'Número do Pedido (Marketplace/Site)', type: 'text', half: true, placeholder: 'Ex: PED-12345678' },
                 { name: 'motivo', label: 'Motivo / Assunto', type: 'select', options: ['Dúvida Técnica (Motor/Peças)', 'Cotação de Peças Linha Leve/Diesel', 'Atraso na Entrega', 'Garantia / Defeito / Troca', 'Reclamação de Atendimento', 'Elogio / Sugestão'], half: true },
                 
-                // --- AJUSTE CRM: SELETOR DE PRODUTOS/KITS COM INPUT NUMÉRICO DE QUANTIDADE LADO A LADO ---
-                { name: 'produtoVinculado', label: 'Vincular Produto Cadastrado', type: 'select', options: produtoOptions, threeQuarters: true },
-                { name: 'qtdProduto', label: 'Qtd. Produto', type: 'number', min: '0', placeholder: 'Qtd' }, // fallback para quarter/col-span-1
-                
-                { name: 'kitVinculado', label: 'Vincular Kit Cadastrado', type: 'select', options: kitOptions, threeQuarters: true },
-                { name: 'qtdKit', label: 'Qtd. Kit', type: 'number', min: '0', placeholder: 'Qtd' }, // fallback para quarter/col-span-1
+                // --- NOVO CAMPO: VÍNCULOS COMERCIAIS (Múltiplos Produtos/Kits com Qtd) ---
+                { name: 'itensVinculados', label: 'Produtos e Kits Vinculados ao Atendimento', type: 'vinculos_comerciais', full: true, produtos: produtoOptions, kits: kitOptions },
                 
                 { name: 'regiaoVinculada', label: 'Região / Frete Relacionado', type: 'select', options: freteOptions, half: true },
                 { name: 'status', label: 'Status do Atendimento *', type: 'select', options: ['Aberto - Aguardando Resolução', 'Em Andamento', 'Aguardando Cliente', 'Resolvido', 'Cancelado'], required: true, half: true },
@@ -1049,8 +1188,6 @@
             const produtosPendentes = (produtos || []).filter(p => p.Status !== 'Ativo' || !p.SKU || !p['Título'] || !p['EAN/GTIN'] || !p['Peso (kg)'] || !p['Comprimento (cm)'] || !p['Largura (cm)'] || !p['Altura (cm)']).length;
             const kitsPendentes = (kits || []).filter(k => k.Status !== 'Ativo' || !k.SKU || !k['Título'] || !k['EAN/GTIN'] || !k['Peso (kg)'] || !k['Comprimento (cm)'] || !k['Largura (cm)'] || !k['Altura (cm)']).length;
             const fretesPendentes = (fretes || []).filter(f => !f.city || !f.cepStart || !f.cepEnd || !f.price).length;
-            
-            // NOVO INDICADOR: TAREFAS PENDENTES (Não conta "Concluída")
             const tarefasPendentes = (tarefas || []).filter(t => t.status !== 'Concluída').length;
 
             // --- TELAS ---
@@ -1144,7 +1281,7 @@
                                     if(data.gerencia) setGerencia(data.gerencia);
                                     if(data.compliance) setCompliance(data.compliance);
                                     if(data.fretes) setFretes(data.fretes);
-                                    if(data.tarefas) setTarefas(data.tarefas); // Restaura tarefas no backup
+                                    if(data.tarefas) setTarefas(data.tarefas);
                                     
                                     showToast("Sistema restaurado com sucesso! Dados sincronizados.", "success");
                                 }
@@ -1288,7 +1425,7 @@
                             <MenuItem id="dados" icon="fas fa-database" label="Dados & Backup" />
                         </nav>
                         <div className="p-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-center text-xs text-gray-500 font-medium">
-                            Versão 3.0 (Kanban & DB Link)
+                            Versão 3.1 (Kanban+ & CRM-Vínculos)
                         </div>
                     </aside>
 
