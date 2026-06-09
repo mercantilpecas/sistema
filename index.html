@@ -204,10 +204,48 @@
             );
         };
 
-        // --- COMPONENTE TAREFAS (NOVO - Kanban/Pipedrive style) ---
+        // --- COMPONENTE TAREFAS (Atualizado: Múltiplos Vínculos e Responsável) ---
         const TarefasManager = ({ tarefas, setTarefas, db, showToast }) => {
             const [modalData, setModalData] = useState(null);
-            
+            const [tempVinculos, setTempVinculos] = useState([]);
+            const [currentVinculoTipo, setCurrentVinculoTipo] = useState('');
+            const [currentVinculoId, setCurrentVinculoId] = useState('');
+
+            const openTaskModal = (task = null) => {
+                if (task) {
+                    setModalData(task);
+                    let initialVinculos = task.vinculos ? [...task.vinculos] : [];
+                    // Retrocompatibilidade para tarefas antigas que tinham apenas 1 vínculo salvo
+                    if (initialVinculos.length === 0 && task.vinculoTipo && task.vinculoId) {
+                        initialVinculos.push({ tipo: task.vinculoTipo, id: task.vinculoId, label: task.vinculoId });
+                    }
+                    setTempVinculos(initialVinculos);
+                } else {
+                    setModalData({ status: 'Pendente', prioridade: 'Média', responsavel: '' });
+                    setTempVinculos([]);
+                }
+                setCurrentVinculoTipo('');
+                setCurrentVinculoId('');
+            };
+
+            const addVinculo = () => {
+                if (!currentVinculoTipo || !currentVinculoId) return;
+                const option = getLinkOptions(currentVinculoTipo).find(o => o.id === currentVinculoId);
+                if (option) {
+                    // Impede duplicidade exata
+                    if (!tempVinculos.some(v => v.tipo === currentVinculoTipo && v.id === currentVinculoId)) {
+                        setTempVinculos([...tempVinculos, { tipo: currentVinculoTipo, id: currentVinculoId, label: option.label }]);
+                    } else {
+                        showToast('Este vínculo já foi adicionado a esta tarefa.', 'info');
+                    }
+                }
+                setCurrentVinculoId(''); // Reseta só o ID para facilitar adicionar vários da mesma área
+            };
+
+            const removeVinculo = (index) => {
+                setTempVinculos(tempVinculos.filter((_, i) => i !== index));
+            };
+
             const handleSave = (e) => {
                 e.preventDefault();
                 const formData = new FormData(e.target);
@@ -215,15 +253,20 @@
                 const newTask = {
                     ...data,
                     id: modalData.id || `TRF-${Date.now()}`,
-                    dataCriacao: modalData.dataCriacao || new Date().toISOString()
+                    dataCriacao: modalData.dataCriacao || new Date().toISOString(),
+                    vinculos: tempVinculos // Salva a lista de vínculos ilimitada
                 };
+
+                // Limpa campos antigos para manter o banco limpo no novo formato
+                delete newTask.vinculoTipo;
+                delete newTask.vinculoId;
 
                 if (modalData.id) {
                     setTarefas(tarefas.map(t => t.id === modalData.id ? newTask : t));
                     showToast('Tarefa atualizada com sucesso!');
                 } else {
                     setTarefas([newTask, ...tarefas]);
-                    showToast('Nova tarefa criada!');
+                    showToast('Nova tarefa criada com sucesso!');
                 }
                 setModalData(null);
             };
@@ -240,7 +283,6 @@
                 }
             };
 
-            // Lógica para vínculo dinâmico de qualquer área do sistema
             const getLinkOptions = (tipo) => {
                 switch(tipo) {
                     case 'Produtos': return db.produtos.filter(p=>p.SKU).map(p => ({ id: p.SKU, label: `${p.SKU} - ${p['Título']?.substring(0,30)}` }));
@@ -257,17 +299,34 @@
                 const priorityColors = { 'Alta': 'border-l-red-500', 'Média': 'border-l-yellow-500', 'Baixa': 'border-l-blue-500' };
                 const bgColors = { 'Pendente': 'bg-white dark:bg-slate-800', 'Em Andamento': 'bg-blue-50 dark:bg-slate-750', 'Concluída': 'bg-gray-100 dark:bg-slate-900 opacity-60' };
                 
+                let displayVinculos = task.vinculos || [];
+                // Retrocompatibilidade visual
+                if (displayVinculos.length === 0 && task.vinculoTipo && task.vinculoId) {
+                    displayVinculos = [{ tipo: task.vinculoTipo, id: task.vinculoId, label: task.vinculoId }];
+                }
+
                 return (
-                    <div className={`${bgColors[task.status]} rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 p-4 border-l-4 ${priorityColors[task.prioridade] || 'border-l-gray-400'} hover:shadow-md transition cursor-pointer relative group`} onClick={() => setModalData(task)}>
+                    <div className={`${bgColors[task.status]} rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 p-4 border-l-4 ${priorityColors[task.prioridade] || 'border-l-gray-400'} hover:shadow-md transition cursor-pointer relative group`} onClick={() => openTaskModal(task)}>
                         <div className="flex justify-between items-start mb-2">
                             <h4 className="font-bold text-sm text-gray-800 dark:text-white leading-tight pr-6">{task.titulo}</h4>
-                            <span className="text-xs font-bold text-gray-400">{task.dataLimite ? new Date(task.dataLimite).toLocaleDateString() : ''}</span>
+                            <span className="text-xs font-bold text-gray-400 whitespace-nowrap">{task.dataLimite ? new Date(task.dataLimite).toLocaleDateString() : ''}</span>
                         </div>
+                        
+                        {task.responsavel && (
+                            <div className="text-[11px] font-bold text-mercantil-blue dark:text-blue-400 mb-2 flex items-center gap-1">
+                                <i className="fas fa-user-circle"></i> {task.responsavel}
+                            </div>
+                        )}
+
                         <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mb-3">{task.descricao}</p>
                         
-                        {task.vinculoTipo && task.vinculoId && (
-                            <div className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-slate-700 rounded text-[10px] font-bold text-gray-600 dark:text-gray-300 mb-3">
-                                <i className="fas fa-link"></i> {task.vinculoTipo}: {task.vinculoId.substring(0,15)}
+                        {displayVinculos.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-3">
+                                {displayVinculos.map((v, i) => (
+                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-slate-700 rounded text-[10px] font-bold text-gray-600 dark:text-gray-300">
+                                        <i className="fas fa-link"></i> {v.tipo}: {String(v.label || v.id).substring(0,18)}
+                                    </span>
+                                ))}
                             </div>
                         )}
 
@@ -292,7 +351,7 @@
                             </h2>
                             <p className="text-sm text-gray-500 mt-1">Quadro Kanban integrado com todas as áreas do ERP.</p>
                         </div>
-                        <button onClick={() => setModalData({ status: 'Pendente', prioridade: 'Média' })} className="bg-mercantil-blue hover:bg-blue-800 text-white px-5 py-2.5 rounded-lg font-bold transition shadow-sm flex items-center">
+                        <button onClick={() => openTaskModal()} className="bg-mercantil-blue hover:bg-blue-800 text-white px-5 py-2.5 rounded-lg font-bold transition shadow-sm flex items-center">
                             <i className="fas fa-plus mr-2"></i> Nova Tarefa
                         </button>
                     </div>
@@ -346,17 +405,33 @@
                                         </select>
                                     </div>
                                     <div>
+                                        <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Responsável</label>
+                                        <input type="text" name="responsavel" defaultValue={modalData.responsavel} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue dark:bg-slate-900 dark:border-slate-600 dark:text-white" placeholder="Quem acompanha a tarefa?" />
+                                    </div>
+                                    <div>
                                         <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Prazo / Data Limite</label>
-                                        <input type="date" name="dataLimite" defaultValue={modalData.dataLimite} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white" />
+                                        <input type="date" name="dataLimite" defaultValue={modalData.dataLimite} className="w-full border rounded p-2 focus:ring-2 focus:ring-mercantil-blue dark:bg-slate-900 dark:border-slate-600 dark:text-white" />
                                     </div>
                                     
-                                    <div className="md:col-span-2 border-t border-gray-200 dark:border-slate-700 pt-4 mt-2">
-                                        <h4 className="text-sm font-bold text-mercantil-blue dark:text-blue-400 mb-3"><i className="fas fa-link mr-2"></i>Vincular a um registro do sistema (Opcional)</h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
+                                    <div className="md:col-span-2 border-t border-gray-200 dark:border-slate-700 pt-5 mt-2">
+                                        <h4 className="text-sm font-bold text-mercantil-blue dark:text-blue-400 mb-3"><i className="fas fa-link mr-2"></i>Vínculos Múltiplos com o Sistema (Opcional)</h4>
+                                        
+                                        {tempVinculos.length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mb-4 p-3 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700">
+                                                {tempVinculos.map((v, i) => (
+                                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded text-xs font-bold text-gray-700 dark:text-gray-200 shadow-sm">
+                                                        <span className="text-mercantil-blue dark:text-blue-400">{v.tipo}:</span> {v.label}
+                                                        <button type="button" onClick={() => removeVinculo(i)} className="ml-1 text-red-500 hover:text-red-700 focus:outline-none transition-colors" title="Remover Vínculo"><i className="fas fa-times-circle"></i></button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50 dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-slate-700">
+                                            <div className="md:col-span-4">
                                                 <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Módulo / Área</label>
-                                                <select name="vinculoTipo" defaultValue={modalData.vinculoTipo || ''} onChange={(e) => setModalData({...modalData, vinculoTipo: e.target.value, vinculoId: ''})} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white">
-                                                    <option value="">Nenhum Vínculo</option>
+                                                <select value={currentVinculoTipo} onChange={(e) => { setCurrentVinculoTipo(e.target.value); setCurrentVinculoId(''); }} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm">
+                                                    <option value="">Selecione uma área...</option>
                                                     <option value="Produtos">Produtos / Peças</option>
                                                     <option value="Kits">Kits</option>
                                                     <option value="CRM (Atendimentos)">CRM (Atendimentos)</option>
@@ -365,14 +440,19 @@
                                                     <option value="Fretes">Fretes</option>
                                                 </select>
                                             </div>
-                                            <div>
+                                            <div className="md:col-span-6">
                                                 <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Registro Específico</label>
-                                                <select name="vinculoId" value={modalData.vinculoId || ''} onChange={(e) => setModalData({...modalData, vinculoId: e.target.value})} disabled={!modalData.vinculoTipo} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white disabled:bg-gray-100 disabled:dark:bg-slate-800">
-                                                    <option value="">Selecione o registro...</option>
-                                                    {getLinkOptions(modalData.vinculoTipo).map(opt => (
+                                                <select value={currentVinculoId} onChange={(e) => setCurrentVinculoId(e.target.value)} disabled={!currentVinculoTipo} className="w-full border rounded p-2 dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm disabled:bg-gray-200 disabled:dark:bg-slate-700">
+                                                    <option value="">{currentVinculoTipo ? 'Selecione o registro...' : 'Escolha a área primeiro'}</option>
+                                                    {currentVinculoTipo && getLinkOptions(currentVinculoTipo).map(opt => (
                                                         <option key={opt.id} value={opt.id}>{opt.label}</option>
                                                     ))}
                                                 </select>
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <button type="button" onClick={addVinculo} disabled={!currentVinculoTipo || !currentVinculoId} className="w-full bg-mercantil-blue hover:bg-blue-800 disabled:bg-gray-400 disabled:dark:bg-slate-600 text-white p-2 rounded text-sm font-bold transition shadow-sm flex items-center justify-center">
+                                                    <i className="fas fa-plus mr-1"></i> Add
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
