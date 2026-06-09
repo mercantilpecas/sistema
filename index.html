@@ -1606,7 +1606,11 @@
                 { name: 'estado', label: 'Estado do Produto *', type: 'select', options: ['Perfeito / Revendável', 'Avariado', 'Faltando Peças', 'Usado', 'Outros'], required: true, half: true },
                 { name: 'status', label: 'Status da Devolução', type: 'select', options: ['Aguardando Chegada', 'Em Conferência', 'Finalizado - Reintegrado', 'Finalizado - Descarte', 'Em Disputa/Mediação'], half: true },
                 { name: 'motivo', label: 'Motivo da Devolução *', type: 'textarea', full: true, required: true },
-                { name: 'vinculos', label: 'Vínculos Globais (Produtos, Atendimentos, etc.)', type: 'vinculos_globais', full: true }
+                
+                // NOVO CAMPO: Adicionado o componente de Vínculos Comerciais igual ao CRM (com Qtd)
+                { name: 'itensVinculados', label: 'Produtos e Kits Vinculados (Devolvidos)', type: 'vinculos_comerciais', full: true, produtos: produtoOptions, kits: kitOptions },
+                
+                { name: 'vinculos', label: 'Outros Vínculos Globais (Atendimentos, Tarefas, etc.)', type: 'vinculos_globais', full: true }
             ];
 
             const qualidadeConfig = [
