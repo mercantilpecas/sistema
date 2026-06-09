@@ -34,12 +34,11 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Biblioteca SheetJS (XLSX) para importação/exportação de planilhas -->
+    <!-- Biblioteca SheetJS (XLSX) para importação/exportação de planilhas e CSVs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
     <style>
         body { background-color: inherit; }
-        /* Scrollbar customizada compatível com Dark Mode */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -49,7 +48,6 @@
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
-        /* Estilos da Tabela de Fretes */
         .table-input {
             width: 100%;
             padding: 4px 8px;
@@ -70,14 +68,14 @@
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Inter', sans-serif; color: #475569;">
             <i class="fas fa-circle-notch fa-spin" style="font-size: 3rem; color: #1E3A8A; margin-bottom: 20px;"></i>
             <h2 style="margin: 0; font-size: 1.5rem; font-weight: 700;">Iniciando Mercantil ERP...</h2>
-            <p style="margin-top: 10px; font-size: 0.9rem;">Se esta tela não sair, verifique sua conexão com a internet.</p>
+            <p style="margin-top: 10px; font-size: 0.9rem;">Carregando módulos de sistema e banco de dados local.</p>
         </div>
     </div>
 
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // --- HOOK CUSTOMIZADO PARA LOCALSTORAGE À PROVA DE FALHAS (CORRIGIDO PARA BUG DE ID) ---
+        // --- HOOK CUSTOMIZADO PARA LOCALSTORAGE ---
         const useLocalStorage = (key, initialValue) => {
             const [storedValue, setStoredValue] = useState(() => {
                 try {
@@ -85,7 +83,6 @@
                     if (!item || item === 'null' || item === 'undefined') return initialValue;
                     const parsed = JSON.parse(item);
                     
-                    // CORREÇÃO: Garante que todos os arrays tenham IDs para evitar bugs de duplicação e deleção em massa
                     if (Array.isArray(parsed)) {
                         let isCorrupted = false;
                         parsed.forEach((obj, idx) => {
@@ -94,12 +91,10 @@
                                 isCorrupted = true;
                             }
                         });
-                        // Salva novamente se tiver consertado algo
                         if (isCorrupted) window.localStorage.setItem(key, JSON.stringify(parsed));
                     }
 
                     if (Array.isArray(initialValue) && !Array.isArray(parsed)) {
-                        console.warn(`[Mercantil ERP] Dados antigos corrompidos em ${key}. Restaurando padrão.`);
                         return initialValue;
                     }
                     
@@ -123,20 +118,8 @@
         };
 
         // --- UTILS ---
-        const parseCSV = (text) => {
-            let p = '', row = [''], ret = [row], i = 0, r = 0, s = !0, l;
-            for (l of text) {
-                if ('"' === l) { if (s && l === p) row[i] += l; s = !s; }
-                else if (',' === l && s) l = row[++i] = '';
-                else if ('\n' === l && s) { if ('\r' === p) row[i] = row[i].slice(0, -1); row = ret[++r] = [l = '']; i = 0; }
-                else row[i] += l;
-                p = l;
-            }
-            return ret.filter(r => r.length > 1 || r[0] !== '');
-        };
-
         const copyToClipboard = (text, showToast) => {
-            if (navigator.clipboard) {
+            if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(text).then(() => showToast(`Copiado: ${text}`, 'success')).catch(() => showToast('Erro ao copiar', 'error'));
             } else {
                 try {
@@ -184,14 +167,14 @@
                                 <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wider">{f.label}</label>
                                 <div className="flex gap-2">
                                     {f.type === 'select' ? (
-                                        <select required={f.required} className="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-white" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})}>
+                                        <select required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})}>
                                             <option value="">Selecione...</option>
-                                            {f.options && f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                                            {f.options && f.options.map((o, idx) => <option key={idx} value={o}>{o}</option>)}
                                         </select>
                                     ) : f.type === 'textarea' ? (
-                                        <textarea required={f.required} className="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-white" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} rows="3" placeholder={f.placeholder || ''} />
+                                        <textarea required={f.required} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} rows="3" placeholder={f.placeholder || ''} />
                                     ) : (
-                                        <input required={f.required} type={f.type||'text'} step={f.step} className="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-white" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} readOnly={f.readOnly} placeholder={f.placeholder || ''} />
+                                        <input required={f.required} type={f.type||'text'} step={f.step} className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} readOnly={f.readOnly} placeholder={f.placeholder || ''} />
                                     )}
                                     {f.button && (
                                         <button type="button" onClick={() => f.action(setData)} className="bg-mercantil-blue text-white px-4 py-2 rounded shadow hover:bg-blue-800 whitespace-nowrap text-sm font-bold flex items-center transition">
@@ -222,24 +205,18 @@
 
             const handleSave = (formData) => {
                 if(onValidate && !onValidate(formData)) return;
-                // Garante que o ID exista e persista
                 const finalData = { ...formData, id: formData.id || `ID-${Date.now()}-${Math.random().toString(36).substr(2,5)}` };
                 onSave(finalData);
                 setEditModal(null);
             };
 
-            // Função para exportar os dados exibidos para CSV
             const handleExportCSV = () => {
                 if (!data || data.length === 0) return showToast('Nenhum dado para exportar', 'error');
-                
-                // Pega as colunas, exclui o campo id interno ou não se quiser mantê-lo
                 const keysToExport = ['id', ...Array.from(new Set(data.flatMap(Object.keys))).filter(k => k !== 'id')];
-
                 const csvContent = [
                     keysToExport.join(','),
                     ...data.map(item => keysToExport.map(k => `"${(item[k]||'').toString().replace(/"/g, '""')}"`).join(','))
                 ].join('\n');
-
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement("a");
                 link.href = URL.createObjectURL(blob);
@@ -258,12 +235,12 @@
                         <div className="flex flex-col sm:flex-row w-full lg:w-auto gap-3">
                             <div className="relative w-full sm:w-64">
                                 <i className="fas fa-search absolute left-3 top-3 text-gray-400"></i>
-                                <input type="text" placeholder="Buscar registros..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white" value={search} onChange={e=>setSearch(e.target.value)} />
+                                <input type="text" placeholder="Buscar registros..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-800 dark:border-slate-600 dark:text-white text-sm" value={search} onChange={e=>setSearch(e.target.value)} />
                             </div>
-                            <button onClick={handleExportCSV} className="bg-green-600 hover:bg-green-800 text-white px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center whitespace-nowrap">
+                            <button onClick={handleExportCSV} className="bg-green-600 hover:bg-green-800 text-white px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center whitespace-nowrap text-sm">
                                 <i className="fas fa-file-csv mr-2"></i>Exportar CSV
                             </button>
-                            <button onClick={() => setEditModal({})} className="bg-mercantil-blue hover:bg-blue-800 text-white px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center whitespace-nowrap">
+                            <button onClick={() => setEditModal({})} className="bg-mercantil-blue hover:bg-blue-800 text-white px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center whitespace-nowrap text-sm">
                                 <i className="fas fa-plus mr-2"></i>Novo
                             </button>
                         </div>
@@ -281,7 +258,7 @@
                                 filtered.map((item, idx) => (
                                     <tr key={item.id || idx} className="border-b dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-slate-700 transition">
                                         {columns.map(c => (
-                                            <td key={c.field} className="px-4 py-3 font-medium">
+                                            <td key={c.field} className="px-4 py-3 font-medium text-sm">
                                                 {c.render ? c.render(item[c.field], item) : item[c.field]}
                                             </td>
                                         ))}
@@ -303,7 +280,7 @@
             );
         };
 
-        // --- COMPONENTE GESTÃO DE FRETES (BUSCACEP ADAPTADO) ---
+        // --- COMPONENTE GESTÃO DE FRETES ---
         const FretesManager = ({ data, onSaveData, showToast }) => {
             const [tab, setTab] = useState('consulta');
             const [query, setQuery] = useState('');
@@ -316,48 +293,34 @@
                 setSearched(true);
                 const q = query.trim();
                 
-                if (!q) {
-                    setResults(data);
-                    return;
-                }
+                if (!q) { setResults(data); return; }
 
-                const cleanQuery = q.replace(/\D/g, ''); // Remove não números
+                const cleanQuery = q.replace(/\D/g, '');
                 const isNumericSearch = cleanQuery.length >= 7;
 
                 const res = data.filter(row => {
                     let matchRegion = false;
-
                     if (isNumericSearch) {
                         const queryCepNum = parseInt(cleanQuery.substring(0, 8), 10);
                         const startCep = parseInt((row.cepStart || '').replace(/\D/g, ''), 10);
                         const endCep = parseInt((row.cepEnd || '').replace(/\D/g, ''), 10);
-                        
-                        if (!isNaN(startCep) && !isNaN(endCep) && queryCepNum >= startCep && queryCepNum <= endCep) {
-                            matchRegion = true;
-                        }
+                        if (!isNaN(startCep) && !isNaN(endCep) && queryCepNum >= startCep && queryCepNum <= endCep) matchRegion = true;
                     } else {
                         const cityStr = (row.city || '').toLowerCase();
-                        if (cityStr.includes(q.toLowerCase())) {
-                            matchRegion = true;
-                        }
+                        if (cityStr.includes(q.toLowerCase())) matchRegion = true;
                     }
-
                     if (!matchRegion) return false;
-
                     if (weight) {
                         const wMin = parseFloat((row.weightMin || '').replace(',', '.'));
                         const wMax = parseFloat((row.weightMax || '').replace(',', '.'));
                         const wQuery = parseFloat(weight.replace(',', '.'));
-
                         if (!isNaN(wQuery)) {
                             if (!isNaN(wMin) && wQuery < wMin) return false;
                             if (!isNaN(wMax) && wQuery > wMax) return false;
                         }
                     }
-
                     return true;
                 });
-
                 setResults(res);
             };
 
@@ -368,8 +331,8 @@
 
             const addRow = () => {
                 const newId = data.length > 0 ? Math.max(...data.map(d => d.id || 0)) + 1 : 1;
-                onSaveData([...data, { id: newId, city: '', cepStart: '', cepEnd: '', weightMin: '', weightMax: '', price: '' }]);
-                showToast('Nova linha adicionada.');
+                onSaveData([{ id: newId, city: '', cepStart: '', cepEnd: '', weightMin: '', weightMax: '', price: '' }, ...data]);
+                showToast('Nova linha adicionada no topo.');
             };
 
             const removeRow = (id) => {
@@ -379,7 +342,8 @@
                 }
             };
 
-            const handleImport = (e) => {
+            // Adaptação para aceitar Universal (XLSX, XLS, CSV) na base de fretes
+            const handleImportUniversal = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
 
@@ -392,11 +356,11 @@
                 reader.onload = function(evt) {
                     try {
                         const fileData = evt.target.result;
-                        const workbook = XLSX.read(fileData, { type: 'binary' });
+                        const workbook = XLSX.read(fileData, { type: 'array' });
                         const firstSheetName = workbook.SheetNames[0];
                         const worksheet = workbook.Sheets[firstSheetName];
                         
-                        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
                         const startIndex = json[0] && json[0][0] && String(json[0][0]).toLowerCase().includes('munic') ? 1 : 0;
                         
                         const newData = [];
@@ -416,40 +380,38 @@
                         }
 
                         if (newData.length > 0) {
-                            onSaveData(newData);
+                            if(window.confirm(`Deseja SUBSTITUIR a base atual pelos ${newData.length} novos registros? (Cancelar irá ADICIONAR aos existentes)`)){
+                                onSaveData(newData);
+                            } else {
+                                onSaveData([...newData, ...data]);
+                            }
                             showToast(`${newData.length} registros importados com sucesso!`);
                         } else {
-                            showToast("Planilha vazia ou em formato inválido.", "error");
+                            showToast("Planilha vazia ou em formato não reconhecido.", "error");
                         }
                     } catch (error) {
                         console.error(error);
                         showToast("Erro ao processar o arquivo.", "error");
                     }
                 };
-                reader.readAsBinaryString(file);
+                reader.readAsArrayBuffer(file);
                 e.target.value = '';
             };
 
             const handleExport = () => {
-                if (typeof XLSX === 'undefined') {
-                    showToast("Biblioteca de exportação não carregada.", "error");
-                    return;
-                }
+                if (typeof XLSX === 'undefined') { showToast("Biblioteca não carregada.", "error"); return; }
                 const exportData = [['Município', 'Faixa CEP Inicial', 'Faixa CEP Final', 'Peso Mínimo (kg)', 'Peso Máximo (kg)', 'Valor do Frete (R$)']];
-                data.forEach(row => {
-                    exportData.push([row.city, row.cepStart, row.cepEnd, row.weightMin, row.weightMax, row.price]);
-                });
+                data.forEach(row => exportData.push([row.city, row.cepStart, row.cepEnd, row.weightMin, row.weightMax, row.price]));
 
                 const ws = XLSX.utils.aoa_to_sheet(exportData);
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, "Fretes");
-                XLSX.writeFile(wb, "Base_de_Dados_Fretes.xlsx");
-                showToast("Planilha de fretes exportada com sucesso!");
+                XLSX.writeFile(wb, `Base_Fretes_${new Date().toISOString().split('T')[0]}.xlsx`);
+                showToast("Planilha de fretes exportada!");
             };
 
             return (
                 <div className="flex flex-col h-full fade-in space-y-6">
-                    {/* Cabeçalho Abas */}
                     <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-wrap gap-2">
                         <button onClick={() => setTab('consulta')} className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${tab === 'consulta' ? 'bg-mercantil-blue text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:hover:bg-slate-600'}`}>
                             <i className="fas fa-search mr-2"></i> Consulta Cotação
@@ -459,7 +421,6 @@
                         </button>
                     </div>
 
-                    {/* ABA: CONSULTA */}
                     {tab === 'consulta' && (
                         <div className="space-y-6 fade-in">
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700">
@@ -475,7 +436,6 @@
                                             <input type="text" value={query} onChange={e=>setQuery(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:text-white" placeholder="Ex: 30123-456 ou Belo Horizonte" />
                                         </div>
                                     </div>
-                                    
                                     <div className="w-full md:w-48">
                                         <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Peso Opc. (kg)</label>
                                         <div className="relative">
@@ -483,7 +443,6 @@
                                             <input type="number" step="0.01" value={weight} onChange={e=>setWeight(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:text-white" placeholder="Ex: 5.5" />
                                         </div>
                                     </div>
-
                                     <div className="flex items-end">
                                         <button type="submit" className="w-full md:w-auto px-6 py-3 rounded-lg font-bold text-white bg-mercantil-orange hover:bg-orange-700 transition-colors shadow-sm flex items-center justify-center gap-2">
                                             <i className="fas fa-search"></i> Calcular
@@ -526,7 +485,6 @@
                         </div>
                     )}
 
-                    {/* ABA: GESTÃO */}
                     {tab === 'gestao' && (
                         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col flex-1 min-h-[500px] fade-in overflow-hidden">
                             <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -535,9 +493,9 @@
                                     <p className="text-xs text-gray-500 dark:text-gray-400">Edite na tabela. Salve como planilha para não perder os dados.</p>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
-                                    <input type="file" id="file-input-frete" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleImport} />
+                                    <input type="file" id="file-input-frete" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleImportUniversal} />
                                     <button onClick={() => document.getElementById('file-input-frete').click()} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
-                                        <i className="fas fa-upload"></i> Importar XLSX
+                                        <i className="fas fa-upload"></i> Importar (XLSX/CSV)
                                     </button>
                                     <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 bg-mercantil-blue text-white rounded-md text-sm font-bold hover:bg-blue-800 transition-colors shadow-sm">
                                         <i className="fas fa-download"></i> Exportar
@@ -608,13 +566,7 @@
             const [marketing, setMarketing] = useLocalStorage('mrc_marketing', []);
             const [gerencia, setGerencia] = useLocalStorage('mrc_gerencia', []);
             const [compliance, setCompliance] = useLocalStorage('mrc_compliance', []);
-            
-            // Estado Novo: Base de Fretes
-            const [fretes, setFretes] = useLocalStorage('mrc_fretes', [
-                { id: 1, city: 'Belo Horizonte', cepStart: '30000-000', cepEnd: '31999-999', weightMin: '0', weightMax: '10', price: '15.00' },
-                { id: 2, city: 'Contagem (Geral)', cepStart: '32000-000', cepEnd: '32399-999', weightMin: '', weightMax: '', price: '' }
-            ]);
-
+            const [fretes, setFretes] = useLocalStorage('mrc_fretes', []);
             const [lastBackup, setLastBackup] = useLocalStorage('mrc_last_backup_time', null);
 
             useEffect(() => {
@@ -628,16 +580,14 @@
                     localStorage.setItem('mrc_auto_backup_dump', JSON.stringify(fullSystemDump));
                     setLastBackup(new Date().toISOString());
                 };
-
                 const intervalId = setInterval(() => {
                     if (!lastBackup) { forceSystemBackup(); } 
                     else {
                         const lastTime = new Date(lastBackup).getTime();
                         const nowTime = new Date().getTime();
-                        if ((nowTime - lastTime) >= 10800000) { forceSystemBackup(); } // 3 horas
+                        if ((nowTime - lastTime) >= 10800000) forceSystemBackup(); // 3 horas
                     }
                 }, 60000);
-
                 return () => clearInterval(intervalId);
             }, [produtos, kits, atendimentos, qualidade, marketing, gerencia, compliance, fretes, lastBackup, setLastBackup]);
 
@@ -654,51 +604,75 @@
                 showToast('Registro excluído!', 'success');
             };
 
-            // --- FUNÇÃO DE IMPORTAÇÃO DE CSV ---
-            const handleUploadCSV = (e, type) => {
+            // --- IMPORTAÇÃO UNIVERSAL (SheetJS) PARA PRODUTOS E KITS ---
+            const handleUploadUniversal = (e, type) => {
                 const file = e.target.files[0];
                 if(!file) return;
+
+                if (typeof XLSX === 'undefined') {
+                    showToast("Biblioteca de planilhas não carregada.", "error");
+                    return;
+                }
+
                 const reader = new FileReader();
                 reader.onload = (evt) => {
-                    const text = evt.target.result;
-                    const rows = parseCSV(text);
-                    if(rows.length < 2) { showToast('Arquivo vazio ou formato inválido.', 'error'); return; }
-                    
-                    const headers = rows[0].map(h => h.trim());
-                    const data = [];
-                    
-                    for(let i=1; i<rows.length; i++) {
-                        const row = rows[i];
-                        if(row.length < 2 && row[0] === '') continue; 
+                    try {
+                        const data = evt.target.result;
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
                         
-                        let obj = {}; 
-                        headers.forEach((h, index) => {
-                            let keyName = h.trim();
-                            let val = row[index] ? row[index].replace(/^"|"$/g, '').trim() : '';
-                            obj[keyName] = val;
-                        });
-                        
-                        // CORREÇÃO: Força o ID mesmo se não vier no CSV. 
-                        if (!obj.id) obj.id = `CSV-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 5)}`;
-                        
-                        if(obj.Observações) obj.Observações = obj.Observações.replace(/\\n/g, '\n');
-                        if(obj['EAN/GTIN']) obj['EAN/GTIN'] = obj['EAN/GTIN'].replace(/\\n/g, '\n');
-                        
-                        data.push(obj);
-                    }
+                        if(json.length === 0) { showToast('Arquivo vazio ou formato inválido.', 'error'); return; }
 
-                    if(type === 'produtos') setProdutos(data);
-                    else setKits(data);
-                    
-                    showToast(`${data.length} ${type} importados com sucesso!`, 'success');
-                    e.target.value = ''; 
+                        const processedData = json.map((row, index) => {
+                            let obj = { ...row };
+                            // Garante IDs consistentes
+                            if (!obj.id && !obj.ID) obj.id = `IMP-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`;
+                            if (obj.ID) { obj.id = obj.ID; delete obj.ID; } 
+                            
+                            // Normalização básica de strings
+                            if(typeof obj.Observações === 'string') obj.Observações = obj.Observações.replace(/\\n/g, '\n');
+                            if(typeof obj['EAN/GTIN'] === 'string') obj['EAN/GTIN'] = obj['EAN/GTIN'].replace(/\\n/g, '\n');
+                            return obj;
+                        });
+
+                        if(type === 'produtos') {
+                            if(window.confirm(`Substituir a base de Produtos atual pelos ${processedData.length} novos? (Cancelar irá adicionar)`)) {
+                                setProdutos(processedData);
+                            } else { setProdutos([...processedData, ...produtos]); }
+                        } else {
+                            if(window.confirm(`Substituir a base de Kits atual pelos ${processedData.length} novos? (Cancelar irá adicionar)`)) {
+                                setKits(processedData);
+                            } else { setKits([...processedData, ...kits]); }
+                        }
+                        showToast(`${processedData.length} ${type} processados com sucesso!`, 'success');
+                    } catch (error) {
+                        console.error(error);
+                        showToast('Erro ao ler arquivo. Formato não suportado.', 'error');
+                    }
                 };
-                reader.readAsText(file, 'UTF-8');
+                reader.readAsArrayBuffer(file);
+                e.target.value = ''; 
             };
 
-            // --- CONFIGURAÇÕES DE FORMULÁRIO ---
+            // --- CONFIGURAÇÕES DE FORMULÁRIOS DINÂMICAS ---
+            
+            // Opções dinâmicas para o CRM baseadas nos cadastros existentes
+            const produtoOptions = produtos && produtos.length > 0 
+                ? produtos.filter(p => p.SKU).map(p => `${p.SKU} - ${p['Título'] ? p['Título'].substring(0,30) + '...' : 'Sem Título'}`) 
+                : [];
+                
+            const kitOptions = kits && kits.length > 0 
+                ? kits.filter(k => k.SKU).map(k => `${k.SKU} - ${k['Título'] ? k['Título'].substring(0,30) + '...' : 'Sem Título'}`) 
+                : [];
+                
+            const freteOptions = fretes && fretes.length > 0 
+                ? fretes.filter(f => f.city).map(f => `${f.city} (CEP: ${f.cepStart} a ${f.cepEnd}) - R$ ${f.price || '0,00'}`) 
+                : [];
+
             const crmConfig = [
-                { name: 'protocolo', label: 'Protocolo de Atendimento *', type: 'text', readOnly: true, button: 'Gerar Servidor Oficial', icon: 'fas fa-fingerprint', full: true, required: true, placeholder: 'Clique no botão para autenticar a data/hora oficial',
+                { name: 'protocolo', label: 'Protocolo de Atendimento *', type: 'text', readOnly: true, button: 'Gerar Protocolo Oficial', icon: 'fas fa-fingerprint', full: true, required: true, placeholder: 'Clique no botão para autenticar',
                   action: (set) => {
                       showToast('Conectando ao World Time API...', 'info');
                       fetch('https://worldtimeapi.org/api/timezone/America/Sao_Paulo')
@@ -707,19 +681,24 @@
                             const dt = new Date(d.datetime);
                             const p = `PRT-${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}-${String(dt.getHours()).padStart(2,'0')}${String(dt.getMinutes()).padStart(2,'0')}${String(dt.getSeconds()).padStart(2,'0')}`;
                             set(prev => ({...prev, protocolo: p, dataHoraOficial: d.datetime}));
-                            showToast('Protocolo gerado pelo horário de Brasília.', 'success');
+                            showToast('Protocolo gerado.', 'success');
                         })
                         .catch(e => {
                             const dt = new Date();
                             const p = `PRT-${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}-${String(dt.getHours()).padStart(2,'0')}${String(dt.getMinutes()).padStart(2,'0')}${String(dt.getSeconds()).padStart(2,'0')}`;
                             set(prev => ({...prev, protocolo: p, dataHoraOficial: dt.toISOString()}));
-                            showToast('Aviso: Protocolo gerado offline (horário da máquina local).', 'info');
                         });
                   }
                 },
                 { name: 'cliente', label: 'Nome / Oficina (Cliente) *', type: 'text', required: true, half: true },
                 { name: 'canal', label: 'Canal de Origem *', type: 'select', options: ['WhatsApp', 'Chat Online', 'E-mail', 'Ligação Telefônica', 'Reclame Aqui', 'Consumidor.gov', 'Balcão/Loja Física'], required: true, half: true },
+                { name: 'pedido', label: 'Número do Pedido (Marketplace/Site)', type: 'text', half: true, placeholder: 'Ex: PED-12345678' },
                 { name: 'motivo', label: 'Motivo / Assunto', type: 'select', options: ['Dúvida Técnica (Motor/Peças)', 'Cotação de Peças Linha Leve/Diesel', 'Atraso na Entrega', 'Garantia / Defeito / Troca', 'Reclamação de Atendimento', 'Elogio / Sugestão'], half: true },
+                // Integrações Relacionais
+                { name: 'produtoVinculado', label: 'Vincular Produto Cadastrado', type: 'select', options: produtoOptions, half: true },
+                { name: 'kitVinculado', label: 'Vincular Kit Cadastrado', type: 'select', options: kitOptions, half: true },
+                { name: 'regiaoVinculada', label: 'Região / Frete Relacionado', type: 'select', options: freteOptions, half: true },
+                
                 { name: 'status', label: 'Status do Atendimento *', type: 'select', options: ['Aberto - Aguardando Resolução', 'Em Andamento', 'Aguardando Cliente', 'Resolvido', 'Cancelado'], required: true, half: true },
                 { name: 'descricao', label: 'Relato do Cliente / Ocorrência', type: 'textarea', full: true, required: true }
             ];
@@ -738,14 +717,14 @@
                 { name: 'plataforma', label: 'Plataforma Mídia', type: 'select', options: ['Instagram', 'Facebook', 'TikTok', 'YouTube', 'Blog Site Mercantil'], required: true, half: true },
                 { name: 'tipo', label: 'Tipo de Conteúdo', type: 'select', options: ['Imagem / Foto do Estoque', 'Vídeo Técnico / Mecânica', 'Carrossel Promocional', 'Artigo/Texto'], required: true, half: true },
                 { name: 'status', label: 'Status da Peça', type: 'select', options: ['Ideia/Pauta', 'Em Produção', 'Aguardando Aprovação', 'Agendado', 'Publicado'], half: true },
-                { name: 'conteudo', label: 'Descrição da Pauta (Ex: Vídeo de dica técnica sobre tucho hidráulico)', type: 'textarea', full: true, required: true }
+                { name: 'conteudo', label: 'Descrição da Pauta', type: 'textarea', full: true, required: true }
             ];
 
             const gerenciaConfig = [
                 { name: 'tipo', label: 'Categoria', type: 'select', options: ['Reunião de Alinhamento', 'Feedback Individual (1:1)', 'Ideia de Melhoria Corporativa', 'Aviso / Comunicado Geral'], required: true, half: true },
                 { name: 'data', label: 'Data do Registro', type: 'date', required: true, half: true },
                 { name: 'titulo', label: 'Título / Assunto Principal *', type: 'text', required: true, full: true },
-                { name: 'envolvidos', label: 'Colaboradores / Departamentos Envolvidos', type: 'text', full: true },
+                { name: 'envolvidos', label: 'Colaboradores / Departamentos', type: 'text', full: true },
                 { name: 'descricao', label: 'Anotações, Pautas e Conclusões', type: 'textarea', full: true }
             ];
 
@@ -755,7 +734,7 @@
                 { name: 'versao', label: 'Versão Atual do Documento', type: 'text', half: true },
                 { name: 'dataRev', label: 'Data da Última Revisão', type: 'date', required: true, half: true },
                 { name: 'status', label: 'Status da Política', type: 'select', options: ['Vigente (Aprovada)', 'Em Revisão', 'Obsoleta'], half: true },
-                { name: 'descricao', label: 'Resumo das Diretrizes de Compliance', type: 'textarea', full: true }
+                { name: 'descricao', label: 'Resumo das Diretrizes', type: 'textarea', full: true }
             ];
 
             const produtosConfig = [
@@ -771,7 +750,7 @@
                 { name: 'Largura (cm)', label: 'Largura (cm)', type: 'number', step: '0.1' }, 
                 { name: 'Altura (cm)', label: 'Altura (cm)', type: 'number', step: '0.1' }, 
                 { name: 'EAN/GTIN', label: 'EAN/GTIN (Código de Barras)', type: 'textarea', full: true, placeholder: 'Ex: 7891234567890' }, 
-                { name: 'Observações', label: 'Observações', type: 'textarea', full: true, placeholder: 'Notas internas...' }
+                { name: 'Observações', label: 'Observações', type: 'textarea', full: true }
             ];
 
             const kitsConfig = [
@@ -786,36 +765,28 @@
                 { name: 'Comprimento (cm)', label: 'Comp. (cm)', type: 'number', step: '0.1' }, 
                 { name: 'Largura (cm)', label: 'Largura (cm)', type: 'number', step: '0.1' }, 
                 { name: 'Altura (cm)', label: 'Altura (cm)', type: 'number', step: '0.1' }, 
-                { name: 'EAN/GTIN', label: 'EAN/GTIN (Código de Barras)', type: 'textarea', full: true, placeholder: 'Ex: 7891234567890' }, 
-                { name: 'Observações', label: 'Observações / Composição do Kit', type: 'textarea', full: true, placeholder: 'Ex: ASGM20ASTD x1 | PGM18STD x1' }
+                { name: 'EAN/GTIN', label: 'EAN/GTIN', type: 'textarea', full: true }, 
+                { name: 'Observações', label: 'Observações / Composição', type: 'textarea', full: true }
             ];
 
             const catalogColumns = [
                 { field: 'SKU', header: 'SKU', render: (val) => <span className="font-mono font-bold cursor-pointer hover:text-blue-500" onClick={(e)=>{ e.stopPropagation(); copyToClipboard(val, showToast); }}>{val} <i className="fas fa-copy ml-1"></i></span> },
                 { field: 'Título', header: 'Título' },
                 { field: 'Status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val==='Ativo'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}`}>{val || 'N/A'}</span> },
-                { field: 'Dimensões', header: 'Dimensões / Peso', render: (_, item) => <span className="text-xs text-gray-500 dark:text-gray-400">{item['Peso (kg)'] ? `${item['Peso (kg)']}kg` : '--'}<br/>{item['Comprimento (cm)'] ? `${item['Comprimento (cm)']}x${item['Largura (cm)']}x${item['Altura (cm)']}` : 'Sem dimensão'}</span> },
+                { field: 'Dimensões', header: 'Dimensões/Peso', render: (_, item) => <span className="text-xs text-gray-500 dark:text-gray-400">{item['Peso (kg)'] ? `${item['Peso (kg)']}kg` : '--'}<br/>{item['Comprimento (cm)'] ? `${item['Comprimento (cm)']}x${item['Largura (cm)']}x${item['Altura (cm)']}` : 'Sem dimensão'}</span> },
                 { field: 'EAN/GTIN', header: 'EAN', render: (val) => val ? <span className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-mercantil-blue text-xs" onClick={(e) => { e.stopPropagation(); copyToClipboard(val, showToast); }}><i className="fas fa-barcode mr-1"></i> {String(val).substring(0,10)}...</span> : <span className="text-gray-400 text-xs">Sem EAN</span> }
             ];
 
-            // --- CÁLCULOS DE PENDÊNCIAS (BADGES DO MENU) ---
-            
-            // CRM e Qualidade: Conta apenas se NÃO estiver resolvido ou cancelado/encerrado
+            // --- CÁLCULOS DE PENDÊNCIAS ---
             const atendimentosPendentes = (atendimentos || []).filter(a => a.status && !['Resolvido', 'Cancelado'].includes(a.status)).length;
             const qualidadePendentes = (qualidade || []).filter(q => !q.status || !['Encerrado com Sucesso'].includes(q.status)).length;
-            
-            // Comercial: Conta apenas se houverem falhas no cadastro (ausência de campos base) ou se status for inativo/rascunho
             const produtosPendentes = (produtos || []).filter(p => p.Status !== 'Ativo' || !p.SKU || !p['Título'] || !p['EAN/GTIN'] || !p['Peso (kg)'] || !p['Comprimento (cm)'] || !p['Largura (cm)'] || !p['Altura (cm)']).length;
             const kitsPendentes = (kits || []).filter(k => k.Status !== 'Ativo' || !k.SKU || !k['Título'] || !k['EAN/GTIN'] || !k['Peso (kg)'] || !k['Comprimento (cm)'] || !k['Largura (cm)'] || !k['Altura (cm)']).length;
             const fretesPendentes = (fretes || []).filter(f => !f.city || !f.cepStart || !f.cepEnd || !f.price).length;
 
-
             // --- TELAS ---
             const Dashboard = () => {
-                const prodAtivos = (produtos || []).filter(p => p.Status === 'Ativo').length;
-                const kitsAtivos = (kits || []).filter(k => k.Status === 'Ativo').length;
                 const chamadosAbertos = (atendimentos || []).filter(a => a.status && !['Resolvido', 'Cancelado'].includes(a.status)).length;
-                
                 return (
                     <div className="fade-in space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -853,7 +824,7 @@
                                 <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4 border-b dark:border-slate-700 pb-2"><i className="fas fa-shield-alt text-mercantil-blue mr-2"></i>Status do Sistema</h3>
                                 <ul className="space-y-3 text-sm dark:text-slate-300">
                                     <li className="flex justify-between items-center"><span>Modo Noturno (Dark)</span><span className="font-bold">{darkMode ? 'Ativado' : 'Desativado'}</span></li>
-                                    <li className="flex justify-between items-center"><span>Status do LocalStorage</span><span className="text-green-600 dark:text-green-400 font-bold"><i className="fas fa-check"></i> Seguro e Operante</span></li>
+                                    <li className="flex justify-between items-center"><span>Status do Banco Local</span><span className="text-green-600 dark:text-green-400 font-bold"><i className="fas fa-check"></i> Seguro e Operante</span></li>
                                     <li className="flex justify-between items-center p-2 bg-gray-50 dark:bg-slate-900 rounded border dark:border-slate-700 mt-2">
                                         <span className="text-mercantil-orange font-bold"><i className="fas fa-cloud-upload-alt mr-2"></i>Último Backup 100%:</span>
                                         <span className="font-mono text-xs">{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nenhum'}</span>
@@ -885,6 +856,42 @@
                     showToast('Download do backup concluído.');
                 };
 
+                // RESTAURAÇÃO DE BACKUP JSON
+                const handleRestoreJSON = (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        try {
+                            const data = JSON.parse(evt.target.result);
+                            
+                            // Validação simples do arquivo Mercantil_ERP_Backup
+                            if (data.produtos || data.kits || data.fretes || data.atendimentos) {
+                                if (window.confirm("ATENÇÃO CRÍTICA: Restaurar um backup irá APAGAR E SUBSTITUIR todos os dados atuais do sistema pelo conteúdo deste arquivo. Tem certeza absoluta?")) {
+                                    if(data.produtos) setProdutos(data.produtos);
+                                    if(data.kits) setKits(data.kits);
+                                    if(data.atendimentos) setAtendimentos(data.atendimentos);
+                                    if(data.qualidade) setQualidade(data.qualidade);
+                                    if(data.marketing) setMarketing(data.marketing);
+                                    if(data.gerencia) setGerencia(data.gerencia);
+                                    if(data.compliance) setCompliance(data.compliance);
+                                    if(data.fretes) setFretes(data.fretes);
+                                    
+                                    showToast("Sistema restaurado com sucesso! Dados sincronizados.", "success");
+                                }
+                            } else {
+                                showToast("Arquivo JSON não reconhecido pelo sistema Mercantil ERP.", "error");
+                            }
+                        } catch(err) {
+                            showToast("Erro ao processar o arquivo. JSON inválido ou corrompido.", "error");
+                            console.error(err);
+                        }
+                    };
+                    reader.readAsText(file);
+                    e.target.value = '';
+                };
+
                 return (
                     <div className="fade-in space-y-6">
                         <h2 className="text-2xl font-bold text-mercantil-dark dark:text-white mb-6 border-b dark:border-slate-700 pb-2"><i className="fas fa-database text-gray-600 dark:text-gray-400 mr-2"></i> Segurança e Base de Dados</h2>
@@ -892,43 +899,53 @@
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 col-span-1 lg:col-span-2">
-                                <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4"><i className="fas fa-file-csv text-mercantil-orange mr-2"></i>Importação de Cadastros (CSV)</h3>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xl font-bold text-gray-800 dark:text-white"><i className="fas fa-file-excel text-mercantil-orange mr-2"></i>Importação Universal (XLSX, XLS, CSV)</h3>
+                                </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="border dark:border-slate-700 p-4 rounded-lg bg-gray-50 dark:bg-slate-900 flex flex-col justify-between">
                                         <div>
                                             <h4 className="font-bold text-mercantil-blue dark:text-blue-400 mb-2">Produtos / Peças</h4>
-                                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Importe sua planilha de peças. Formato esperado: arquivo .csv separado por vírgulas.</p>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Carregue sua planilha de peças. Compatível com Excel (.xlsx) e CSV.</p>
                                         </div>
                                         <label className="flex items-center justify-center gap-2 w-full p-3 border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg hover:bg-blue-50 dark:hover:bg-slate-800 hover:border-mercantil-blue cursor-pointer transition text-gray-600 dark:text-gray-300 font-medium">
-                                            <i className="fas fa-upload text-mercantil-blue dark:text-blue-400"></i> Escolher CSV de Peças
-                                            <input type="file" accept=".csv" className="hidden" onChange={e => handleUploadCSV(e, 'produtos')} />
+                                            <i className="fas fa-upload text-mercantil-blue dark:text-blue-400"></i> Importar Planilha de Peças
+                                            <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={e => handleUploadUniversal(e, 'produtos')} />
                                         </label>
                                     </div>
                                     <div className="border dark:border-slate-700 p-4 rounded-lg bg-gray-50 dark:bg-slate-900 flex flex-col justify-between">
                                         <div>
                                             <h4 className="font-bold text-mercantil-orange dark:text-orange-400 mb-2">Kits Comerciais</h4>
-                                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Importe as combinações de kits. Formato esperado: arquivo .csv separado por vírgulas.</p>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Carregue as combinações de kits. Compatível com Excel (.xlsx) e CSV.</p>
                                         </div>
                                         <label className="flex items-center justify-center gap-2 w-full p-3 border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg hover:bg-orange-50 dark:hover:bg-slate-800 hover:border-mercantil-orange cursor-pointer transition text-gray-600 dark:text-gray-300 font-medium">
-                                            <i className="fas fa-upload text-mercantil-orange dark:text-orange-400"></i> Escolher CSV de Kits
-                                            <input type="file" accept=".csv" className="hidden" onChange={e => handleUploadCSV(e, 'kits')} />
+                                            <i className="fas fa-upload text-mercantil-orange dark:text-orange-400"></i> Importar Planilha de Kits
+                                            <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={e => handleUploadUniversal(e, 'kits')} />
                                         </label>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700">
-                                <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2"><i className="fas fa-shield-check text-green-500 mr-2"></i>Rotina de Backup</h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">O sistema salva todos os dados automaticamente a cada 3 horas. Estes dados ficam salvos em um cofre no seu próprio navegador.</p>
+                                <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2"><i className="fas fa-shield-check text-green-500 mr-2"></i>Gerenciar Backups</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">O sistema salva os dados automaticamente a cada 3 horas. Exporte o arquivo JSON para segurança extrema.</p>
                                 
                                 <div className="p-4 bg-gray-50 dark:bg-slate-900 border dark:border-slate-700 rounded-lg mb-6 flex flex-col gap-2">
-                                    <div className="text-sm dark:text-slate-300"><strong>Data do Último Backup Completo:</strong></div>
-                                    <div className="text-mercantil-blue dark:text-blue-400 font-mono text-lg">{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nenhum backup registrado ainda'}</div>
+                                    <div className="text-sm dark:text-slate-300"><strong>Último Backup Automático:</strong></div>
+                                    <div className="text-mercantil-blue dark:text-blue-400 font-mono text-lg">{lastBackup ? new Date(lastBackup).toLocaleString() : 'Nenhum backup gerado'}</div>
                                 </div>
 
-                                <div className="flex gap-3">
+                                <div className="flex gap-3 mb-4">
                                     <button onClick={forceBackupNow} className="flex-1 bg-mercantil-dark text-white p-3 rounded-lg hover:bg-black font-bold shadow transition"><i className="fas fa-save mr-2"></i> Forçar Backup Local</button>
                                     <button onClick={downloadBackup} className="flex-1 bg-green-600 text-white p-3 rounded-lg hover:bg-green-800 font-bold shadow transition"><i className="fas fa-file-download mr-2"></i> Baixar JSON Base</button>
+                                </div>
+
+                                <div className="border-t dark:border-slate-700 pt-4 mt-2">
+                                    <label className="flex items-center justify-center gap-2 w-full p-3 bg-blue-50 dark:bg-slate-700 text-mercantil-blue dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-slate-600 cursor-pointer transition font-bold shadow-sm">
+                                        <i className="fas fa-cloud-upload-alt text-lg"></i> Restaurar Backup (.json)
+                                        <input type="file" accept=".json" className="hidden" onChange={handleRestoreJSON} />
+                                    </label>
+                                    <p className="text-xs text-center text-gray-500 mt-2">Irá sobrescrever a base inteira com o arquivo escolhido.</p>
                                 </div>
                             </div>
 
@@ -947,7 +964,6 @@
                 );
             };
 
-            // --- MENU LATERAL ---
             const MenuItem = ({ id, icon, label, badge }) => {
                 const isActive = activeMenu === id;
                 return (
@@ -965,7 +981,6 @@
 
             return (
                 <div className="flex h-screen overflow-hidden dark:bg-slate-900 font-sans text-gray-800 dark:text-slate-200">
-                    {/* Toast Notification */}
                     {toast.visible && (
                         <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-xl text-white font-bold fade-in flex items-center gap-3 ${toast.type==='success'?'bg-green-600':toast.type==='info'?'bg-blue-600':'bg-red-600'}`}>
                             <i className={`fas ${toast.type==='success'?'fa-check-circle':toast.type==='info'?'fa-info-circle':'fa-exclamation-triangle'} text-xl`}></i>
@@ -973,7 +988,6 @@
                         </div>
                     )}
 
-                    {/* Sidebar */}
                     <aside className="w-64 bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 shadow-sm flex flex-col hidden md:flex">
                         <div className="p-6 border-b border-gray-200 dark:border-slate-700 flex items-center justify-center gap-3">
                             <div className="bg-mercantil-dark text-white w-10 h-10 rounded-lg flex items-center justify-center text-xl shadow-md"><i className="fas fa-cogs"></i></div>
@@ -1003,11 +1017,10 @@
                             <MenuItem id="dados" icon="fas fa-database" label="Dados & Backup" />
                         </nav>
                         <div className="p-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 text-center text-xs text-gray-500 font-medium">
-                            Versão 2.5 (Ajuste de Badges de Pendência)
+                            Versão 2.6 (Update DB & Integr.)
                         </div>
                     </aside>
 
-                    {/* Mobile Header */}
                     <div className="md:hidden fixed top-0 left-0 right-0 bg-white dark:bg-slate-800 border-b dark:border-slate-700 z-40 p-4 flex justify-between items-center shadow-sm">
                         <div className="font-extrabold text-mercantil-blue dark:text-blue-400 text-lg flex items-center gap-2"><i className="fas fa-cogs"></i> MERCANTIL</div>
                         <select className="bg-gray-100 dark:bg-slate-700 border-none rounded p-2 text-sm font-bold focus:ring-0 outline-none" value={activeMenu} onChange={e => setActiveMenu(e.target.value)}>
@@ -1020,13 +1033,11 @@
                             <option value="marketing">Marketing</option>
                             <option value="gerencia">Gerência</option>
                             <option value="compliance">Compliance</option>
-                            <option value="dados">Backup / CSV</option>
+                            <option value="dados">Backup / Arquivos</option>
                         </select>
                     </div>
 
-                    {/* Main Content */}
                     <main className="flex-1 flex flex-col h-full overflow-hidden mt-16 md:mt-0 relative">
-                        {/* Topbar */}
                         <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 p-4 sm:px-8 hidden md:flex justify-between items-center shadow-sm z-10">
                             <h2 className="text-2xl font-bold text-gray-800 dark:text-white capitalize flex items-center gap-2">
                                 {activeMenu === 'dados' ? 'Segurança e Dados' : activeMenu.replace('-', ' ')}
@@ -1035,14 +1046,13 @@
                                 <button onClick={() => setDarkMode(!darkMode)} className="text-xl p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 transition" title="Alternar Tema">
                                     <i className={`fas ${darkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-slate-600'}`}></i>
                                 </button>
-                                <a href="https://mercantilpecas.com.br/" target="_blank" className="text-sm text-gray-500 dark:text-gray-300 hover:text-mercantil-orange transition font-bold"><i className="fas fa-globe mr-1"></i> Site Oficial</a>
+                                <a href="https://mercantilpecas.com.br/" target="_blank" rel="noreferrer" className="text-sm text-gray-500 dark:text-gray-300 hover:text-mercantil-orange transition font-bold"><i className="fas fa-globe mr-1"></i> Site Oficial</a>
                                 <div className="h-9 w-9 rounded-full bg-mercantil-blue text-white flex items-center justify-center font-bold shadow-md cursor-pointer border-2 border-white dark:border-slate-600">
                                     <i className="fas fa-user-tie"></i>
                                 </div>
                             </div>
                         </header>
 
-                        {/* Roteamento de Páginas */}
                         <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scroll">
                             {activeMenu === 'dashboard' && <Dashboard />}
                             
@@ -1050,7 +1060,7 @@
                                 <BaseManager title="Gestão de Atendimento Integrada (CRM)" icon="fas fa-headset" data={atendimentos} formConfig={crmConfig} showToast={showToast}
                                     onValidate={(data) => { if(!data.protocolo) { showToast('Obrigatório gerar o Protocolo de Atendimento oficial antes de salvar!', 'error'); return false; } return true; }}
                                     onSave={(data) => saveStateRecord(data, atendimentos, setAtendimentos)} onDelete={(id) => deleteStateRecord(id, atendimentos, setAtendimentos)}
-                                    columns={[ { field: 'protocolo', header: 'Protocolo', render: (val) => <span className="font-mono text-mercantil-blue dark:text-blue-400">{val}</span> }, { field: 'cliente', header: 'Cliente' }, { field: 'canal', header: 'Canal' }, { field: 'status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val && val.includes('Resolvido') ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{val}</span> } ]} />
+                                    columns={[ { field: 'protocolo', header: 'Protocolo', render: (val) => <span className="font-mono text-mercantil-blue dark:text-blue-400">{val}</span> }, { field: 'pedido', header: 'Pedido', render: (val) => <span className="font-bold text-xs">{val || '-'}</span> }, { field: 'cliente', header: 'Cliente' }, { field: 'canal', header: 'Canal' }, { field: 'status', header: 'Status', render: (val) => <span className={`px-2 py-1 rounded text-xs font-bold ${val && val.includes('Resolvido') ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{val}</span> } ]} />
                             )}
 
                             {activeMenu === 'qualidade' && (
