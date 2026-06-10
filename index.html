@@ -67,6 +67,14 @@
         .rich-editor-content ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 0.5rem; }
         .rich-editor-content ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 0.5rem; }
         .rich-editor-content a { color: #3b82f6; text-decoration: underline; }
+        
+        /* Captcha Visual */
+        .captcha-box {
+            background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.05) 10px, rgba(0,0,0,0.05) 20px);
+        }
+        .dark .captcha-box {
+            background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.05) 10px, rgba(255,255,255,0.05) 20px);
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 transition-colors duration-200">
@@ -1432,7 +1440,7 @@
         };
 
         // --- APLICAÇÃO PRINCIPAL ---
-        const MainApp = () => {
+        const MainApp = ({ onLogout }) => {
             const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
             
             const showToast = (message, type = 'success') => {
@@ -1443,6 +1451,12 @@
             const [darkMode, setDarkMode] = useLocalStorage('mrc_theme_dark', false);
             const [activeMenu, setActiveMenu] = useState('painel');
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+            
+            // Controle do Menu de Usuário e Alteração de Senha
+            const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+            const [isPwdModalOpen, setIsPwdModalOpen] = useState(false);
+            const [pwdData, setPwdData] = useState({ current: '', new1: '', new2: '', captcha: '' });
+            const [captchaText, setCaptchaText] = useState('');
             
             const [produtos, setProdutos] = useLocalStorage('mrc_produtos', []);
             const [kits, setKits] = useLocalStorage('mrc_kits', []);
@@ -1458,6 +1472,66 @@
             const [lastBackup, setLastBackup] = useLocalStorage('mrc_last_backup_time', null);
 
             const db = useMemo(() => ({ produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas }), [produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas]);
+
+            // --- TIMER DE INATIVIDADE (15 MINUTOS) ---
+            useEffect(() => {
+                let timeoutId;
+                const resetTimer = () => {
+                    clearTimeout(timeoutId);
+                    // 15 minutos = 15 * 60 * 1000 = 900000ms
+                    timeoutId = setTimeout(() => {
+                        onLogout();
+                    }, 900000); 
+                };
+
+                const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+                events.forEach(event => window.addEventListener(event, resetTimer));
+                resetTimer(); // Inicia o contador
+
+                return () => {
+                    clearTimeout(timeoutId);
+                    events.forEach(event => window.removeEventListener(event, resetTimer));
+                };
+            }, [onLogout]);
+
+            // --- GERAÇÃO DE CAPTCHA VISUAL ---
+            const generateCaptcha = () => {
+                const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+                let result = '';
+                for (let i = 0; i < 5; i++) {
+                    result += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                setCaptchaText(result);
+            };
+
+            useEffect(() => {
+                if (isPwdModalOpen) generateCaptcha();
+            }, [isPwdModalOpen]);
+
+            const handlePwdChangeSubmit = (e) => {
+                e.preventDefault();
+                const savedPwd = localStorage.getItem('mrc_user_pwd') || '152416';
+                
+                if (pwdData.current !== savedPwd) {
+                    return showToast('A senha atual está incorreta.', 'error');
+                }
+                if (pwdData.new1 !== pwdData.new2) {
+                    return showToast('As novas senhas não coincidem.', 'error');
+                }
+                if (pwdData.new1.length < 6) {
+                    return showToast('A nova senha deve ter no mínimo 6 caracteres.', 'error');
+                }
+                if (pwdData.captcha.toUpperCase() !== captchaText) {
+                    generateCaptcha();
+                    return showToast('Captcha incorreto. Tente novamente.', 'error');
+                }
+
+                localStorage.setItem('mrc_user_pwd', pwdData.new1);
+                showToast('Senha alterada com sucesso!', 'success');
+                setIsPwdModalOpen(false);
+                setPwdData({ current: '', new1: '', new2: '', captcha: '' });
+            };
+
 
             useEffect(() => {
                 if (darkMode) document.documentElement.classList.add('dark');
@@ -1605,7 +1679,6 @@
                 { name: 'status', label: 'Status da Devolução', type: 'select', options: ['Aguardando Chegada', 'Em Conferência', 'Finalizado - Reintegrado', 'Finalizado - Descarte', 'Em Disputa/Mediação'], half: true },
                 { name: 'motivo', label: 'Motivo da Devolução *', type: 'textarea', full: true, required: true },
                 
-                // NOVO CAMPO: Adicionado o componente de Vínculos Comerciais igual ao CRM (com Qtd)
                 { name: 'itensVinculados', label: 'Produtos e Kits Vinculados (Devolvidos)', type: 'vinculos_comerciais', full: true, produtos: produtoOptions, kits: kitOptions },
                 
                 { name: 'vinculos', label: 'Outros Vínculos Globais (Atendimentos, Tarefas, etc.)', type: 'vinculos_globais', full: true }
@@ -1896,13 +1969,13 @@
             return (
                 <div className="flex h-screen overflow-hidden dark:bg-slate-900 font-sans text-gray-800 dark:text-slate-200 w-full">
                     {toast.visible && (
-                        <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-xl text-white font-bold fade-in flex items-center gap-3 ${toast.type==='success'?'bg-green-600':toast.type==='info'?'bg-blue-600':'bg-red-600'}`}>
+                        <div className={`fixed top-5 right-5 z-[60] px-6 py-3 rounded-lg shadow-xl text-white font-bold fade-in flex items-center gap-3 ${toast.type==='success'?'bg-green-600':toast.type==='info'?'bg-blue-600':'bg-red-600'}`}>
                             <i className={`fas ${toast.type==='success'?'fa-check-circle':toast.type==='info'?'fa-info-circle':'fa-exclamation-triangle'} text-xl`}></i>
                             {toast.message}
                         </div>
                     )}
 
-                    {/* Fundo escuro ao abrir o menu mobile */}
+                    {/* Overlay do Sidebar Mobile */}
                     {isSidebarOpen && (
                         <div 
                             className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden" 
@@ -1964,7 +2037,7 @@
                     </div>
 
                     <main className="flex-1 flex flex-col h-full overflow-hidden mt-[72px] md:mt-0 relative w-full">
-                        <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 p-4 sm:px-8 hidden md:flex justify-between items-center shadow-sm z-10 w-full">
+                        <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 p-4 sm:px-8 hidden md:flex justify-between items-center shadow-sm z-10 w-full relative">
                             <h2 className="text-2xl font-bold text-gray-800 dark:text-white capitalize flex items-center gap-2">
                                 {activeMenu === 'dados' ? 'Segurança e Dados' : 
                                  activeMenu === 'catalogo' ? 'Catálogo Comercial' : 
@@ -1975,8 +2048,36 @@
                                     <i className={`fas ${darkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-slate-600'}`}></i>
                                 </button>
                                 <a href="https://mercantilpecas.com.br/" target="_blank" rel="noreferrer" className="text-sm text-gray-500 dark:text-gray-300 hover:text-mercantil-orange transition font-bold"><i className="fas fa-globe mr-1"></i> Site Oficial</a>
-                                <div className="h-9 w-9 rounded-full bg-mercantil-blue text-white flex items-center justify-center font-bold shadow-md cursor-pointer border-2 border-white dark:border-slate-600 shrink-0">
-                                    <i className="fas fa-user-tie"></i>
+                                
+                                {/* Menu do Usuário */}
+                                <div className="relative">
+                                    <div 
+                                        onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} 
+                                        className="h-9 w-9 rounded-full bg-mercantil-blue text-white flex items-center justify-center font-bold shadow-md cursor-pointer border-2 border-white dark:border-slate-600 shrink-0 hover:bg-blue-800 transition"
+                                    >
+                                        <i className="fas fa-user-tie"></i>
+                                    </div>
+                                    
+                                    {isUserMenuOpen && (
+                                        <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setIsUserMenuOpen(false)}></div>
+                                            <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 py-2 z-50 fade-in">
+                                                <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700 mb-1">
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400">Logado como</p>
+                                                    <p className="text-sm font-bold text-mercantil-dark dark:text-white truncate">Usuário: Isaac</p>
+                                                </div>
+                                                <button onClick={() => { setIsPwdModalOpen(true); setIsUserMenuOpen(false); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-slate-200 transition">
+                                                    <i className="fas fa-key w-5 text-center text-mercantil-blue dark:text-blue-400"></i> Alterar Senha
+                                                </button>
+                                                <button onClick={onLogout} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-slate-200 transition">
+                                                    <i className="fas fa-lock w-5 text-center text-yellow-500"></i> Bloquear Acesso
+                                                </button>
+                                                <button onClick={onLogout} className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition">
+                                                    <i className="fas fa-sign-out-alt w-5 text-center text-red-500"></i> Sair do Sistema
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         </header>
@@ -2054,6 +2155,73 @@
                             {activeMenu === 'dados' && <ImportExport />}
                         </div>
                     </main>
+
+                    {/* Módulo / Modal de Alterar Senha */}
+                    {isPwdModalOpen && (
+                        <Modal title="Segurança: Alterar Senha" onClose={() => setIsPwdModalOpen(false)}>
+                            <form onSubmit={handlePwdChangeSubmit} className="space-y-4 px-2">
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Senha Atual *</label>
+                                    <input 
+                                        type="password" 
+                                        required 
+                                        value={pwdData.current} 
+                                        onChange={(e) => setPwdData({...pwdData, current: e.target.value})}
+                                        className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" 
+                                    />
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Nova Senha *</label>
+                                        <input 
+                                            type="password" 
+                                            required 
+                                            value={pwdData.new1} 
+                                            onChange={(e) => setPwdData({...pwdData, new1: e.target.value})}
+                                            className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" 
+                                            placeholder="Mín. 6 caracteres"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Confirmar Nova Senha *</label>
+                                        <input 
+                                            type="password" 
+                                            required 
+                                            value={pwdData.new2} 
+                                            onChange={(e) => setPwdData({...pwdData, new2: e.target.value})}
+                                            className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white" 
+                                            placeholder="Repita a senha"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="pt-4 border-t border-gray-200 dark:border-slate-700 mt-2">
+                                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Validação de Segurança (Captcha)</label>
+                                    <div className="flex flex-col sm:flex-row gap-4 items-center">
+                                        <div className="captcha-box w-full sm:w-auto min-w-[150px] bg-gray-200 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg text-center p-3 font-mono text-2xl tracking-widest font-bold text-gray-800 dark:text-gray-200 select-none shadow-inner line-through decoration-gray-400 dark:decoration-slate-500">
+                                            {captchaText}
+                                        </div>
+                                        <button type="button" onClick={generateCaptcha} className="p-2 text-gray-500 hover:text-mercantil-blue transition" title="Gerar novo código">
+                                            <i className="fas fa-sync-alt text-xl"></i>
+                                        </button>
+                                        <input 
+                                            type="text" 
+                                            required 
+                                            value={pwdData.captcha} 
+                                            onChange={(e) => setPwdData({...pwdData, captcha: e.target.value.toUpperCase()})}
+                                            className="w-full sm:flex-1 border rounded-lg p-3 text-lg text-center font-mono focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:border-slate-600 dark:text-white uppercase" 
+                                            placeholder="Digite o código"
+                                        />
+                                    </div>
+                                </div>
+                                
+                                <div className="flex justify-end gap-3 pt-6 w-full">
+                                    <button type="button" onClick={() => setIsPwdModalOpen(false)} className="px-5 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition font-medium">Cancelar</button>
+                                    <button type="submit" className="px-6 py-2.5 bg-mercantil-blue text-white rounded-lg hover:bg-blue-800 shadow-md font-bold transition flex items-center"><i className="fas fa-save mr-2"></i> Confirmar Alteração</button>
+                                </div>
+                            </form>
+                        </Modal>
+                    )}
                 </div>
             );
         };
@@ -2071,7 +2239,10 @@
                 e.preventDefault();
                 if (blocked) return;
 
-                if (username === 'isaac' && password === '152416') {
+                // Busca a senha atual salva ou a senha padrão
+                const currentPassword = localStorage.getItem('mrc_user_pwd') || '152416';
+
+                if (username === 'isaac' && password === currentPassword) {
                     onLogin();
                 } else {
                     const newAttempts = attempts + 1;
@@ -2093,22 +2264,6 @@
                 setTimeout(() => {
                     setLoading(false);
                     setError('Limite de 3 tentativas excedido. A senha de recuperação foi enviada para o e-mail c*****f@gmail.com');
-                    
-                    /* Exemplo de integração real com serviço de e-mail (EmailJS, FormSubmit, etc):
-                    fetch('https://api.emailjs.com/api/v1.0/email/send', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            service_id: 'YOUR_SERVICE_ID',
-                            template_id: 'YOUR_TEMPLATE_ID',
-                            user_id: 'YOUR_PUBLIC_KEY',
-                            template_params: {
-                                to_email: 'caasigf@gmail.com',
-                                message: 'Tentativa de login bloqueada. A senha de acesso é: 152416'
-                            }
-                        })
-                    });
-                    */
                 }, 1500);
             };
 
@@ -2181,6 +2336,7 @@
         };
 
         const App = () => {
+            // O sessionStorage garante que ao fechar a aba/navegador, a sessão expira e o login seja exigido.
             const [isAuthenticated, setIsAuthenticated] = useState(() => {
                 return sessionStorage.getItem('mrc_auth') === 'true';
             });
@@ -2190,11 +2346,16 @@
                 setIsAuthenticated(true);
             };
 
+            const handleLogout = () => {
+                sessionStorage.removeItem('mrc_auth');
+                setIsAuthenticated(false);
+            }
+
             if (!isAuthenticated) {
                 return <LoginScreen onLogin={handleLogin} />;
             }
 
-            return <MainApp />;
+            return <MainApp onLogout={handleLogout} />;
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
