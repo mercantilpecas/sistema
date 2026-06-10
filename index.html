@@ -34,10 +34,8 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Biblioteca SheetJS (XLSX) para importação/exportação de planilhas e CSVs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-    <!-- SDK do Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
@@ -1434,7 +1432,7 @@
         };
 
         // --- APLICAÇÃO PRINCIPAL ---
-        const App = () => {
+        const MainApp = () => {
             const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
             
             const showToast = (message, type = 'success') => {
@@ -2058,6 +2056,145 @@
                     </main>
                 </div>
             );
+        };
+
+        // --- COMPONENTE DE LOGIN ---
+        const LoginScreen = ({ onLogin }) => {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [attempts, setAttempts] = useState(0);
+            const [error, setError] = useState('');
+            const [blocked, setBlocked] = useState(false);
+            const [loading, setLoading] = useState(false);
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                if (blocked) return;
+
+                if (username === 'isaac' && password === '152416') {
+                    onLogin();
+                } else {
+                    const newAttempts = attempts + 1;
+                    setAttempts(newAttempts);
+                    if (newAttempts >= 3) {
+                        setBlocked(true);
+                        setError('');
+                        enviarEmail();
+                    } else {
+                        setError(`Credenciais incorretas. Tentativa ${newAttempts} de 3.`);
+                    }
+                }
+            };
+
+            const enviarEmail = () => {
+                setLoading(true);
+                
+                // Simulação de requisição para envio de e-mail (necessitaria de um backend/API real)
+                setTimeout(() => {
+                    setLoading(false);
+                    setError('Limite de 3 tentativas excedido. A senha de recuperação foi enviada para o e-mail c*****f@gmail.com');
+                    
+                    /* Exemplo de integração real com serviço de e-mail (EmailJS, FormSubmit, etc):
+                    fetch('https://api.emailjs.com/api/v1.0/email/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            service_id: 'YOUR_SERVICE_ID',
+                            template_id: 'YOUR_TEMPLATE_ID',
+                            user_id: 'YOUR_PUBLIC_KEY',
+                            template_params: {
+                                to_email: 'caasigf@gmail.com',
+                                message: 'Tentativa de login bloqueada. A senha de acesso é: 152416'
+                            }
+                        })
+                    });
+                    */
+                }, 1500);
+            };
+
+            return (
+                <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-slate-900 p-4 w-full transition-colors duration-200">
+                    <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-gray-200 dark:border-slate-700 p-8 fade-in">
+                        <div className="flex flex-col items-center justify-center mb-8">
+                            <LogoMercantil />
+                            <h1 className="text-2xl font-extrabold text-mercantil-blue dark:text-blue-400 mt-4 tracking-tight">MERCANTIL ERP</h1>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mt-1">Acesso Restrito</p>
+                        </div>
+
+                        <form onSubmit={handleLogin} className="space-y-5">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Usuário</label>
+                                <div className="relative">
+                                    <i className="fas fa-user absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                                    <input 
+                                        type="text" 
+                                        value={username} 
+                                        onChange={e => setUsername(e.target.value)} 
+                                        disabled={blocked || loading}
+                                        className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:text-white transition-all" 
+                                        placeholder="Digite o usuário" 
+                                        required 
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Senha</label>
+                                <div className="relative">
+                                    <i className="fas fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                                    <input 
+                                        type="password" 
+                                        value={password} 
+                                        onChange={e => setPassword(e.target.value)} 
+                                        disabled={blocked || loading}
+                                        className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-mercantil-blue outline-none dark:bg-slate-900 dark:text-white transition-all" 
+                                        placeholder="Digite a senha" 
+                                        required 
+                                    />
+                                </div>
+                            </div>
+
+                            {error && (
+                                <div className={`p-4 rounded-xl text-sm font-bold flex items-start gap-3 ${blocked ? 'bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200 dark:border-orange-800' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800'}`}>
+                                    <i className={`fas ${blocked ? 'fa-envelope mt-0.5 text-lg' : 'fa-exclamation-triangle mt-0.5 text-lg'}`}></i>
+                                    <span>{error}</span>
+                                </div>
+                            )}
+
+                            <button 
+                                type="submit" 
+                                disabled={blocked || loading}
+                                className="w-full bg-mercantil-blue hover:bg-blue-800 disabled:bg-gray-400 disabled:dark:bg-slate-700 text-white font-bold py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 mt-2"
+                            >
+                                {loading ? (
+                                    <><i className="fas fa-circle-notch fa-spin"></i> Autenticando...</>
+                                ) : blocked ? (
+                                    <><i className="fas fa-ban"></i> Acesso Bloqueado</>
+                                ) : (
+                                    <><i className="fas fa-sign-in-alt"></i> Entrar no Sistema</>
+                                )}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [isAuthenticated, setIsAuthenticated] = useState(() => {
+                return sessionStorage.getItem('mrc_auth') === 'true';
+            });
+
+            const handleLogin = () => {
+                sessionStorage.setItem('mrc_auth', 'true');
+                setIsAuthenticated(true);
+            };
+
+            if (!isAuthenticated) {
+                return <LoginScreen onLogin={handleLogin} />;
+            }
+
+            return <MainApp />;
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
