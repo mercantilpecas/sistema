@@ -145,6 +145,58 @@
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJpbmpvanBtY29iZHdkZm9md3RxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTg5MzcsImV4cCI6MjA5NjU5NDkzN30.-GvQXCJqGZ9uyf2nmc84mnPImUuhmKYDbZaRGLGhcww';
         const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
+        // --- VALIDADORES E FORMATADORES DE CPF/CNPJ ---
+        const isValidCPF = (cpf) => {
+            cpf = cpf.replace(/[^\d]+/g,'');
+            if(cpf == '' || cpf.length != 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+            let add = 0;
+            for (let i=0; i < 9; i ++) add += parseInt(cpf.charAt(i)) * (10 - i);
+            let rev = 11 - (add % 11);
+            if (rev == 10 || rev == 11) rev = 0;
+            if (rev != parseInt(cpf.charAt(9))) return false;
+            add = 0;
+            for (let i = 0; i < 10; i ++) add += parseInt(cpf.charAt(i)) * (11 - i);
+            rev = 11 - (add % 11);
+            if (rev == 10 || rev == 11) rev = 0;
+            if (rev != parseInt(cpf.charAt(10))) return false;
+            return true;
+        };
+
+        const isValidCNPJ = (cnpj) => {
+            cnpj = cnpj.replace(/[^\d]+/g,'');
+            if(cnpj == '' || cnpj.length != 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
+            let tamanho = cnpj.length - 2;
+            let numeros = cnpj.substring(0,tamanho);
+            let digitos = cnpj.substring(tamanho);
+            let soma = 0;
+            let pos = tamanho - 7;
+            for (let i = tamanho; i >= 1; i--) { soma += numeros.charAt(tamanho - i) * pos--; if (pos < 2) pos = 9; }
+            let resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
+            if (resultado != digitos.charAt(0)) return false;
+            tamanho = tamanho + 1;
+            numeros = cnpj.substring(0,tamanho);
+            soma = 0; pos = tamanho - 7;
+            for (let i = tamanho; i >= 1; i--) { soma += numeros.charAt(tamanho - i) * pos--; if (pos < 2) pos = 9; }
+            resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
+            if (resultado != digitos.charAt(1)) return false;
+            return true;
+        };
+
+        const formatCpfCnpj = (v) => {
+            v = v.replace(/\D/g,"");
+            if (v.length <= 11) {
+                v = v.replace(/(\d{3})(\d)/,"$1.$2");
+                v = v.replace(/(\d{3})(\d)/,"$1.$2");
+                v = v.replace(/(\d{3})(\d{1,2})$/,"$1-$2");
+            } else {
+                v = v.replace(/^(\d{2})(\d)/,"$1.$2");
+                v = v.replace(/^(\d{2})\.(\d{3})(\d)/,"$1.$2.$3");
+                v = v.replace(/\.(\d{3})(\d)/,".$1/$2");
+                v = v.replace(/(\d{4})(\d)/,"$1-$2");
+            }
+            return v.substring(0, 18);
+        };
+
         // --- HOOK GENÉRICO PARA SUPABASE (Tabela `data`) ---
         function useLocalStorage(key, initialValue) {
             const isLocalOnly = key === 'mrc_theme_dark' || key === 'mrc_last_backup_time';
@@ -235,6 +287,91 @@
                 <div style={{ display: 'none' }} className="absolute inset-0 rounded-xl bg-white text-mercantil-orange items-center justify-center font-extrabold text-xl shadow-md border-2 border-mercantil-orange z-0">M</div>
             </div>
         );
+
+        // --- COMPONENTES: VALIDADORES E GERENCIADORES ESPECÍFICOS ---
+
+        const CpfCnpjInput = ({ value, onChange, readOnly, required }) => {
+            const [isValid, setIsValid] = useState(null);
+            
+            useEffect(() => {
+                const cleanVal = (value || '').replace(/\D/g, '');
+                if (cleanVal.length === 11) setIsValid(isValidCPF(cleanVal));
+                else if (cleanVal.length === 14) setIsValid(isValidCNPJ(cleanVal));
+                else setIsValid(cleanVal.length === 0 ? null : false);
+            }, [value]);
+
+            const handleChange = (e) => {
+                const formatted = formatCpfCnpj(e.target.value);
+                onChange(formatted);
+            };
+
+            return (
+                <div className="relative w-full">
+                    <input 
+                        type="text" 
+                        value={value || ''} 
+                        onChange={handleChange} 
+                        readOnly={readOnly} 
+                        required={required} 
+                        className={`w-full rounded-xl p-3 text-sm glass-input pr-10 read-only:opacity-80 transition-all ${isValid === false && value ? 'border-red-500 focus:ring-red-500 ring-1 ring-red-500/50' : ''} ${isValid === true ? 'border-green-500 focus:ring-green-500 ring-1 ring-green-500/50' : ''}`} 
+                        placeholder="000.000.000-00 ou 00.000.000/0000-00" 
+                    />
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-lg">
+                        {isValid === true && <i className="fas fa-check-circle text-green-500"></i>}
+                        {isValid === false && value && <i className="fas fa-times-circle text-red-500"></i>}
+                    </div>
+                </div>
+            );
+        };
+
+        const ContactManager = ({ value = [], onChange, readOnly }) => {
+            const [tipo, setTipo] = useState('Telefone');
+            const [contato, setContato] = useState('');
+
+            const handleAdd = () => {
+                if (!contato.trim()) return;
+                onChange([...(Array.isArray(value) ? value : []), { tipo, valor: contato }]);
+                setContato('');
+            };
+            const handleRemove = (idx) => {
+                onChange((Array.isArray(value) ? value : []).filter((_, i) => i !== idx));
+            };
+
+            return (
+                <div className="border border-gray-300 dark:border-slate-600 rounded-2xl p-4 bg-black/5 dark:bg-slate-800/50 shadow-inner mt-1 w-full">
+                    <div className="flex flex-wrap gap-2 mb-3">
+                        {(Array.isArray(value) ? value : []).map((v, i) => (
+                            <span key={i} className="inline-flex items-center gap-2 px-3 py-1.5 glass-panel rounded-xl text-xs font-bold shadow-sm transition">
+                                <span className={v.tipo === 'Telefone' ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}>
+                                    <i className={v.tipo === 'Telefone' ? 'fas fa-phone-alt mr-1' : 'fas fa-envelope mr-1'}></i>{v.tipo}:
+                                </span>
+                                <span>{v.valor}</span>
+                                {!readOnly && <button type="button" onClick={() => handleRemove(i)} className="text-red-500 hover:text-red-700 transition ml-1"><i className="fas fa-times-circle"></i></button>}
+                            </span>
+                        ))}
+                        {(Array.isArray(value) ? value : []).length === 0 && <span className="text-xs text-gray-500 dark:text-gray-400 italic">Nenhum contato adicionado.</span>}
+                    </div>
+                    {!readOnly && (
+                        <div className="flex flex-col sm:flex-row gap-2 items-end mt-2 pt-3 border-t border-black/5 dark:border-white/5">
+                            <div className="w-full sm:w-1/3">
+                                <label className="block text-xs font-bold mb-1 opacity-70">Tipo de Contato</label>
+                                <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full rounded-xl p-2.5 text-sm glass-input">
+                                    <option value="Telefone">Telefone/Celular</option>
+                                    <option value="E-mail">E-mail</option>
+                                </select>
+                            </div>
+                            <div className="w-full sm:flex-1">
+                                <label className="block text-xs font-bold mb-1 opacity-70">Dado / Valor</label>
+                                <input type="text" value={contato} onChange={e => setContato(e.target.value)} className="w-full rounded-xl p-2.5 text-sm glass-input" placeholder={tipo === 'Telefone' ? '(00) 00000-0000' : 'email@exemplo.com'} />
+                            </div>
+                            <button type="button" onClick={handleAdd} disabled={!contato} className="w-full sm:w-auto bg-mercantil-blue text-white px-5 rounded-xl hover:bg-blue-800 disabled:opacity-50 transition shadow h-[42px] flex items-center justify-center transform hover:scale-[1.02]">
+                                <i className="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        };
 
         // --- COMPONENTE: HISTÓRICO DE LOGS (CRM) ---
         const HistoryLogManager = ({ value = [], onChange, authContext, readOnly }) => {
@@ -504,15 +641,21 @@
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
                         {config.map(f => {
                             const colClass = f.full ? 'col-span-1 md:col-span-4' : f.threeQuarters ? 'col-span-1 md:col-span-3' : f.half ? 'col-span-1 md:col-span-2' : 'col-span-1';
+                            
                             return (
                                 <div key={f.name} className={colClass}>
                                     <label className="block text-xs font-bold mb-1 opacity-70 uppercase tracking-wider ml-1">{f.label}</label>
+                                    
                                     {f.type === 'vinculos_comerciais' ? (
                                         <ItensVinculadosManager value={data[f.name]} onChange={v => setData({...data, [f.name]: v})} produtosOptions={f.produtos} kitsOptions={f.kits} readOnly={readOnly} />
                                     ) : f.type === 'vinculos_globais' ? (
                                         <VinculosGlobaisManager value={data[f.name]} onChange={v => setData({...data, [f.name]: v})} db={db} readOnly={readOnly} />
                                     ) : f.type === 'history_log' ? (
                                         <HistoryLogManager value={data[f.name]} onChange={v => setData({...data, [f.name]: v})} authContext={authContext} readOnly={readOnly} />
+                                    ) : f.type === 'cpf_cnpj' ? (
+                                        <CpfCnpjInput value={data[f.name]} onChange={v => setData({...data, [f.name]: v})} readOnly={f.readOnly || readOnly} required={f.required} />
+                                    ) : f.type === 'contact_manager' ? (
+                                        <ContactManager value={data[f.name]} onChange={v => setData({...data, [f.name]: v})} readOnly={f.readOnly || readOnly} />
                                     ) : (
                                         <div className="flex flex-col sm:flex-row gap-2 w-full">
                                             {f.type === 'select' ? (
@@ -1243,8 +1386,8 @@
 
             const modulosList = [
                 { id: 'painel', label: 'Painel Geral' }, { id: 'tarefas', label: 'Tarefas (Kanban)' }, { id: 'notas', label: 'Bloco de Notas' },
-                { id: 'catalogo', label: 'Catálogo (Peças & Kits)' }, { id: 'devolucoes', label: 'Devoluções' }, { id: 'fretes', label: 'Gestão de Fretes' },
-                { id: 'crm', label: 'CRM Integrado' }, { id: 'qualidade', label: 'Qualidade & NCs' }, { id: 'marketing', label: 'Marketing' },
+                { id: 'catalogo', label: 'Catálogo (Peças & Kits)' }, { id: 'fretes', label: 'Gestão de Fretes' }, { id: 'crm', label: 'CRM Integrado' }, 
+                { id: 'devolucoes', label: 'Devoluções' }, { id: 'qualidade', label: 'Gestão de Qualidade' }, { id: 'marketing', label: 'Marketing' },
                 { id: 'gerencia', label: 'Gerência Interna' }, { id: 'compliance', label: 'Compliance' }, { id: 'ferramentas', label: 'Ferramentas de Imagem' },
                 { id: 'dados', label: 'Dados & Backup' }, { id: 'usuarios', label: 'Gestão de Usuários' }
             ];
@@ -1477,14 +1620,26 @@
 
             const usuarioOptions = usuarios && usuarios.length > 0 ? usuarios.filter(u => u.ativo).map(u => u.nome) : [];
 
+            // Função validadora de interrupção (OnSave check)
+            const handleCpfCnpjValidation = (doc) => {
+                if (!doc) return false; 
+                const clean = doc.replace(/\D/g, '');
+                if (clean.length === 11) return isValidCPF(clean);
+                if (clean.length === 14) return isValidCNPJ(clean);
+                return false;
+            };
+
             const crmConfig = [
                 { name: 'protocolo', label: 'Protocolo de Atendimento *', type: 'text', readOnly: true, button: 'Gerar Oficial', icon: 'fas fa-fingerprint', full: true, required: true, action: actionProtocolCRM },
                 { name: 'cliente', label: 'Nome / Oficina (Cliente) *', type: 'text', required: true, half: true },
+                { name: 'documento', label: 'CPF / CNPJ *', type: 'cpf_cnpj', required: true, half: true },
+                { name: 'contatos', label: 'Telefones e E-mails', type: 'contact_manager', full: true },
+                { name: 'enderecoEntrega', label: 'Endereço Completo de Entrega', type: 'text', full: true, placeholder: 'Rua, Número, Bairro, Cidade - UF, CEP' },
                 { name: 'canal', label: 'Canal de Origem *', type: 'select', options: ['WhatsApp', 'Chat Online', 'E-mail', 'Ligação Telefônica', 'Reclame Aqui', 'Consumidor.gov', 'Balcão/Loja Física'], required: true, half: true },
                 { name: 'pedido', label: 'Número do Pedido', type: 'text', half: true, placeholder: 'Ex: PED-123' },
                 { name: 'motivo', label: 'Motivo / Assunto', type: 'select', options: ['Dúvida Técnica (Motor/Peças)', 'Cotação de Peças', 'Atraso na Entrega', 'Garantia / Defeito / Troca', 'Reclamação de Atendimento', 'Elogio / Sugestão'], half: true },
-                { name: 'itensVinculados', label: 'Produtos e Kits', type: 'vinculos_comerciais', full: true, produtos: produtoOptions, kits: kitOptions },
                 { name: 'regiaoVinculada', label: 'Região / Frete', type: 'select', options: freteOptions, half: true },
+                { name: 'itensVinculados', label: 'Produtos e Kits', type: 'vinculos_comerciais', full: true, produtos: produtoOptions, kits: kitOptions },
                 { name: 'usuarioVinculado', label: 'Usuário Responsável', type: 'select', options: usuarioOptions, half: true },
                 { name: 'status', label: 'Status *', type: 'select', options: ['Aberto - Aguardando Resolução', 'Em Andamento', 'Aguardando Cliente', 'Resolvido', 'Cancelado'], required: true, half: true },
                 { name: 'historico_obs', label: 'Histórico de Observações (Relatos)', type: 'history_log', full: true }
@@ -1492,10 +1647,14 @@
 
             const devolucoesConfig = [
                 { name: 'protocolo', label: 'Protocolo DEV *', type: 'text', readOnly: true, button: 'Gerar DEV', icon: 'fas fa-undo', full: true, required: true, action: actionProtocolDEV },
-                { name: 'pedido', label: 'Número do Pedido', type: 'text', required: true, half: true }, { name: 'cliente', label: 'Nome do Cliente', type: 'text', required: true, half: true },
+                { name: 'pedido', label: 'Número do Pedido', type: 'text', required: true, half: true }, 
+                { name: 'cliente', label: 'Nome do Cliente', type: 'text', required: true, half: true },
+                { name: 'documento', label: 'CPF / CNPJ *', type: 'cpf_cnpj', required: true, half: true },
                 { name: 'origem', label: 'Origem Envio *', type: 'select', options: ['Full', 'Envio Direto', 'Outros'], required: true, half: true },
                 { name: 'embalagem', label: 'Embalagem *', type: 'select', options: ['Original', 'Modificada', 'Outros'], required: true, half: true },
                 { name: 'estado', label: 'Estado *', type: 'select', options: ['Perfeito', 'Avariado', 'Faltando Peças', 'Usado', 'Outros'], required: true, half: true },
+                { name: 'contatos', label: 'Telefones e E-mails', type: 'contact_manager', full: true },
+                { name: 'enderecoEntrega', label: 'Endereço Completo de Entrega', type: 'text', full: true, placeholder: 'Rua, Número, Bairro, Cidade - UF, CEP' },
                 { name: 'status', label: 'Status', type: 'select', options: ['Aguardando Chegada', 'Em Conferência', 'Finalizado - Reintegrado', 'Finalizado - Descarte', 'Em Disputa/Mediação'], half: true },
                 { name: 'usuarioVinculado', label: 'Usuário Responsável', type: 'select', options: usuarioOptions, half: true },
                 { name: 'motivo', label: 'Motivo *', type: 'textarea', full: true, required: true },
@@ -1603,8 +1762,8 @@
             };
 
             const showProdutividade = checkPerm('tarefas') !== 'none' || checkPerm('notas') !== 'none';
-            const showComercial = checkPerm('catalogo') !== 'none' || checkPerm('devolucoes') !== 'none' || checkPerm('fretes') !== 'none';
-            const showQualidade = checkPerm('crm') !== 'none' || checkPerm('qualidade') !== 'none';
+            const showComercial = checkPerm('catalogo') !== 'none' || checkPerm('fretes') !== 'none';
+            const showQualidade = checkPerm('crm') !== 'none' || checkPerm('devolucoes') !== 'none' || checkPerm('qualidade') !== 'none';
             const showFerramentas = checkPerm('ferramentas') !== 'none';
             const showAdmin = checkPerm('marketing') !== 'none' || checkPerm('gerencia') !== 'none' || checkPerm('compliance') !== 'none';
             const showSistema = checkPerm('usuarios') !== 'none' || checkPerm('dados') !== 'none';
@@ -1636,12 +1795,12 @@
 
                                 {showComercial && <div className="pt-5 pb-2"><p className="px-5 text-[10px] font-extrabold opacity-40 uppercase tracking-widest">Comercial</p></div>}
                                 <MenuItem id="catalogo" icon="fas fa-cubes" label="Catálogo / Peças" />
-                                <MenuItem id="devolucoes" icon="fas fa-undo-alt" label="Devoluções" />
                                 <MenuItem id="fretes" icon="fas fa-truck" label="Gestão de Fretes" />
                                 
-                                {showQualidade && <div className="pt-5 pb-2"><p className="px-5 text-[10px] font-extrabold opacity-40 uppercase tracking-widest">Qualidade</p></div>}
+                                {showQualidade && <div className="pt-5 pb-2"><p className="px-5 text-[10px] font-extrabold opacity-40 uppercase tracking-widest">Atendimento e Qualidade</p></div>}
                                 <MenuItem id="crm" icon="fas fa-headset" label="CRM Integrado" />
-                                <MenuItem id="qualidade" icon="fas fa-medal" label="Não Conformidades" />
+                                <MenuItem id="devolucoes" icon="fas fa-undo-alt" label="Devoluções" />
+                                <MenuItem id="qualidade" icon="fas fa-medal" label="Gestão de Qualidade" />
                                 
                                 {showFerramentas && (
                                     <>
@@ -1663,7 +1822,7 @@
                             </nav>
                             <div className="p-5 border-t border-black/5 dark:border-white/5 bg-white/30 dark:bg-black/20 text-center flex items-center justify-center gap-3">
                                 <button onClick={() => setDarkMode(!darkMode)} className="w-10 h-10 rounded-full bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/20 transition-colors flex items-center justify-center"><i className={`fas ${darkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-slate-600'} text-lg`}></i></button>
-                                <span className="text-xs font-bold opacity-50">V 5.1 (Liquid UI)</span>
+                                <span className="text-xs font-bold opacity-50">V 5.2 (Liquid UI)</span>
                             </div>
                         </aside>
                     </div>
@@ -1708,9 +1867,26 @@
                             {activeMenu === 'tarefas' && <TarefasManager tarefas={tarefas} setTarefas={setTarefas} usuarios={usuarios} showToast={showToast} db={db} authContext={{ currentUser, isSuperAdmin }} />}
                             {activeMenu === 'notas' && <NotasManager notas={notas} setNotas={setNotas} showToast={showToast} db={db} authContext={{ currentUser, isSuperAdmin }} />}
                             {activeMenu === 'catalogo' && <CatalogoManager produtos={produtos} setProdutos={setProdutos} kits={kits} setKits={setKits} produtosConfig={produtosConfig} kitsConfig={kitsConfig} catalogColumns={catalogColumns} showToast={showToast} saveStateRecord={saveStateRecord} deleteStateRecord={deleteStateRecord} db={db} readOnly={!canEdit('catalogo')} canDelete={canDelete('catalogo')} authContext={{ currentUser, isSuperAdmin }} />}
-                            {activeMenu === 'devolucoes' && <BaseManager title="Gestão de Devoluções" icon="fas fa-undo-alt" data={devolucoes} formConfig={devolucoesConfig} showToast={showToast} db={db} readOnly={!canEdit('devolucoes')} canDelete={canDelete('devolucoes')} authContext={{ currentUser, isSuperAdmin }} onValidate={d=>d.protocolo} onSave={d=>saveStateRecord(d, devolucoes, setDevolucoes)} onDelete={id=>deleteStateRecord(id, devolucoes, setDevolucoes)} columns={[{field:'protocolo',header:'Prot.',render:v=><span className="font-mono font-bold text-mercantil-light"><i className="fas fa-hashtag opacity-50 text-xs"></i> {v}</span>},{field:'cliente',header:'Cliente'},{field:'status',header:'Status'}]} />}
-                            {activeMenu === 'crm' && <BaseManager title="CRM Integrado" icon="fas fa-headset" data={atendimentos} formConfig={crmConfig} showToast={showToast} db={db} readOnly={!canEdit('crm')} canDelete={canDelete('crm')} authContext={{ currentUser, isSuperAdmin }} onValidate={d=>d.protocolo} onSave={d=>saveStateRecord(d, atendimentos, setAtendimentos)} onDelete={id=>deleteStateRecord(id, atendimentos, setAtendimentos)} columns={[{field:'protocolo',header:'Prot.',render:v=><span className="font-mono font-bold text-mercantil-light"><i className="fas fa-hashtag opacity-50 text-xs"></i> {v}</span>},{field:'cliente',header:'Cliente'},{field:'status',header:'Status'}]} />}
-                            {activeMenu === 'qualidade' && <BaseManager title="Qualidade & NCs" icon="fas fa-medal" data={qualidade} formConfig={qualidadeConfig} showToast={showToast} db={db} readOnly={!canEdit('qualidade')} canDelete={canDelete('qualidade')} authContext={{ currentUser, isSuperAdmin }} onSave={d=>saveStateRecord(d, qualidade, setQualidade)} onDelete={id=>deleteStateRecord(id, qualidade, setQualidade)} columns={[{field:'data',header:'Data',render:v=><span className="font-mono font-bold opacity-80">{v}</span>},{field:'tipo',header:'Tipo'},{field:'status',header:'Status'}]} />}
+                            
+                            {/* CRM Integrado modificado */}
+                            {activeMenu === 'crm' && <BaseManager title="CRM Integrado" icon="fas fa-headset" data={atendimentos} formConfig={crmConfig} showToast={showToast} db={db} readOnly={!canEdit('crm')} canDelete={canDelete('crm')} authContext={{ currentUser, isSuperAdmin }} 
+                                onValidate={d=>{
+                                    if(!d.protocolo) { showToast('Gere o protocolo antes de salvar.', 'error'); return false; }
+                                    if(!handleCpfCnpjValidation(d.documento)) { showToast('Preencha um CPF ou CNPJ válido!', 'error'); return false; }
+                                    return true;
+                                }} 
+                                onSave={d=>saveStateRecord(d, atendimentos, setAtendimentos)} onDelete={id=>deleteStateRecord(id, atendimentos, setAtendimentos)} columns={[{field:'protocolo',header:'Prot.',render:v=><span className="font-mono font-bold text-mercantil-light"><i className="fas fa-hashtag opacity-50 text-xs"></i> {v}</span>},{field:'cliente',header:'Cliente'},{field:'status',header:'Status'}]} />}
+                                
+                            {/* Devoluções modificado */}
+                            {activeMenu === 'devolucoes' && <BaseManager title="Gestão de Devoluções" icon="fas fa-undo-alt" data={devolucoes} formConfig={devolucoesConfig} showToast={showToast} db={db} readOnly={!canEdit('devolucoes')} canDelete={canDelete('devolucoes')} authContext={{ currentUser, isSuperAdmin }} 
+                                onValidate={d=>{
+                                    if(!d.protocolo) { showToast('Gere o protocolo de devolução.', 'error'); return false; }
+                                    if(!handleCpfCnpjValidation(d.documento)) { showToast('Preencha um CPF ou CNPJ válido!', 'error'); return false; }
+                                    return true;
+                                }} 
+                                onSave={d=>saveStateRecord(d, devolucoes, setDevolucoes)} onDelete={id=>deleteStateRecord(id, devolucoes, setDevolucoes)} columns={[{field:'protocolo',header:'Prot.',render:v=><span className="font-mono font-bold text-mercantil-light"><i className="fas fa-hashtag opacity-50 text-xs"></i> {v}</span>},{field:'cliente',header:'Cliente'},{field:'status',header:'Status'}]} />}
+                                
+                            {activeMenu === 'qualidade' && <BaseManager title="Gestão de Qualidade" icon="fas fa-medal" data={qualidade} formConfig={qualidadeConfig} showToast={showToast} db={db} readOnly={!canEdit('qualidade')} canDelete={canDelete('qualidade')} authContext={{ currentUser, isSuperAdmin }} onSave={d=>saveStateRecord(d, qualidade, setQualidade)} onDelete={id=>deleteStateRecord(id, qualidade, setQualidade)} columns={[{field:'data',header:'Data',render:v=><span className="font-mono font-bold opacity-80">{v}</span>},{field:'tipo',header:'Tipo'},{field:'status',header:'Status'}]} />}
                             {activeMenu === 'marketing' && <BaseManager title="Marketing" icon="fas fa-bullhorn" data={marketing} formConfig={marketingConfig} showToast={showToast} db={db} readOnly={!canEdit('marketing')} canDelete={canDelete('marketing')} authContext={{ currentUser, isSuperAdmin }} onSave={d=>saveStateRecord(d, marketing, setMarketing)} onDelete={id=>deleteStateRecord(id, marketing, setMarketing)} columns={[{field:'data',header:'Data',render:v=><span className="font-mono font-bold opacity-80">{v}</span>},{field:'plataforma',header:'Mídia'},{field:'status',header:'Status'}]} />}
                             {activeMenu === 'gerencia' && <BaseManager title="Gerência Interna" icon="fas fa-briefcase" data={gerencia} formConfig={gerenciaConfig} showToast={showToast} db={db} readOnly={!canEdit('gerencia')} canDelete={canDelete('gerencia')} authContext={{ currentUser, isSuperAdmin }} onSave={d=>saveStateRecord(d, gerencia, setGerencia)} onDelete={id=>deleteStateRecord(id, gerencia, setGerencia)} columns={[{field:'data',header:'Data',render:v=><span className="font-mono font-bold opacity-80">{v}</span>},{field:'tipo',header:'Categoria'},{field:'titulo',header:'Assunto'}]} />}
                             {activeMenu === 'compliance' && <BaseManager title="Compliance" icon="fas fa-shield-alt" data={compliance} formConfig={complianceConfig} showToast={showToast} db={db} readOnly={!canEdit('compliance')} canDelete={canDelete('compliance')} authContext={{ currentUser, isSuperAdmin }} onSave={d=>saveStateRecord(d, compliance, setCompliance)} onDelete={id=>deleteStateRecord(id, compliance, setCompliance)} columns={[{field:'codigo',header:'Cód.',render:v=><span className="font-mono font-extrabold text-mercantil-orange">{v}</span>},{field:'titulo',header:'Título'},{field:'status',header:'Status'}]} />}
