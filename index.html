@@ -145,84 +145,7 @@
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJpbmpvanBtY29iZHdkZm9md3RxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTg5MzcsImV4cCI6MjA5NjU5NDkzN30.-GvQXCJqGZ9uyf2nmc84mnPImUuhmKYDbZaRGLGhcww';
         const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-        // --- HOOKS CUSTOMIZADOS PARA SUPABASE ---
-
-        // Hook Específico para Usuários (Tabela `users`)
-        function useUsuariosSync(initialValue) {
-            const key = 'mrc_usuarios';
-            const adminIsaac = { id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } };
-
-            // Garante que o Isaac sempre exista e esteja blindado
-            const ensureIsaac = (usersArray) => {
-                let arr = Array.isArray(usersArray) ? [...usersArray] : [];
-                const idx = arr.findIndex(u => u.username === 'isaac');
-                if (idx === -1) {
-                    arr.push(adminIsaac);
-                } else {
-                    arr[idx] = { ...arr[idx], ...adminIsaac }; 
-                }
-                return arr;
-            };
-
-            const [storedValue, setStoredValue] = useState(() => {
-                try {
-                    const item = window.localStorage.getItem(key);
-                    let val = (!item || item === 'null' || item === 'undefined') ? initialValue : JSON.parse(item);
-                    return ensureIsaac(val);
-                } catch (error) { return ensureIsaac(initialValue); }
-            });
-
-            // Sincronização inicial e realtime com a tabela 'users'
-            useEffect(() => {
-                let isMounted = true;
-                const fetchFromSupabase = async () => {
-                    const { data, error } = await supabase.from('users').select('*');
-                    if (!error && data && isMounted) {
-                        const validatedData = ensureIsaac(data);
-                        setStoredValue(validatedData);
-                        window.localStorage.setItem(key, JSON.stringify(validatedData));
-                    }
-                };
-                fetchFromSupabase();
-
-                const channel = supabase.channel('public:users')
-                    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => { fetchFromSupabase(); })
-                    .subscribe();
-
-                return () => { isMounted = false; supabase.removeChannel(channel); };
-            }, []);
-
-            const setValue = async (value) => {
-                try {
-                    let valueToStore = value instanceof Function ? value(storedValue) : value;
-                    valueToStore = ensureIsaac(valueToStore);
-
-                    setStoredValue(valueToStore);
-                    window.localStorage.setItem(key, JSON.stringify(valueToStore));
-
-                    // Atualiza a nuvem na tabela 'users'
-                    const oldValue = Array.isArray(storedValue) ? storedValue : [];
-                    const newIds = new Set(valueToStore.map(v => String(v.id)));
-                    const deletedItems = oldValue.filter(v => !newIds.has(String(v.id)));
-
-                    if (valueToStore.length > 0) {
-                        await supabase.from('users').upsert(valueToStore);
-                    }
-                    
-                    for (let item of deletedItems) {
-                        // Segurança extra: nunca apaga o Isaac da nuvem
-                        if (item.username !== 'isaac') {
-                            await supabase.from('users').delete().eq('id', String(item.id));
-                        }
-                    }
-
-                } catch (error) { console.error("Erro de sincronização com Supabase (users):", error); }
-            };
-
-            return [storedValue, setValue];
-        }
-
-        // Hook Genérico para os demais dados (Tabela `data`)
+        // --- HOOK GENÉRICO PARA SUPABASE (Tabela `data`) ---
         function useLocalStorage(key, initialValue) {
             const isLocalOnly = key === 'mrc_theme_dark' || key === 'mrc_last_backup_time';
             const tipo = key.replace('mrc_', ''); 
@@ -287,7 +210,7 @@
                     if (upsertData.length > 0) await supabase.from('data').upsert(upsertData);
                     for (let item of deletedItems) await supabase.from('data').delete().eq('id', String(item.id || item.ID)).eq('tipo', tipo);
 
-                } catch (error) { console.error("Erro de sincronização com Supabase (data):", error); }
+                } catch (error) { console.error("Erro de sincronização genérica:", error); }
             };
 
             return [storedValue, setValue];
@@ -1305,8 +1228,7 @@
                             <button onClick={() => {
                                 if(window.confirm('TEM CERTEZA ABSOLUTA? Tudo será apagado da nuvem (Supabase) e do navegador.')) {
                                     localStorage.clear(); 
-                                    supabase.from('data').delete().neq('id', '0').then(() => {});
-                                    supabase.from('users').delete().neq('id', 'usr-admin-isaac').then(() => { window.location.reload(); });
+                                    supabase.from('data').delete().neq('id', '0').then(() => { window.location.reload(); });
                                 }
                             }} className="w-full bg-red-600 text-white px-6 py-3.5 rounded-xl shadow-md hover:bg-red-700 transition font-bold transform hover:scale-[1.02]">Wipe Completo (Resetar ERP)</button>
                         </div>
@@ -1330,8 +1252,7 @@
             const handleSave = (e) => {
                 e.preventDefault(); const formData = new FormData(e.target); const data = Object.fromEntries(formData.entries());
                 
-                // Correção do Bug de ID apagado: Se input estiver disabled, ele não vem no formData.
-                // Então, mantemos o username do editUser caso seja uma edição.
+                // Correção definitiva do BUG do ID de login: pega do editUser se já existir
                 const finalUsername = editUser.id ? editUser.username : data.username;
 
                 if(!editUser.id && usuarios.find(u => u.username === finalUsername)) {
@@ -1340,7 +1261,6 @@
                 
                 const permissoes = {}; modulosList.forEach(m => { permissoes[m.id] = data[`perm_${m.id}`] || 'none'; });
                 
-                // Garantir blindagem inalterável para o Isaac se for o usuário em questão
                 const isIsaac = editUser.username === 'isaac' || finalUsername === 'isaac';
                 
                 const newUser = { 
@@ -1352,8 +1272,18 @@
                     permissoes: isIsaac ? { all: 'edit' } : permissoes 
                 };
                 
-                if (editUser.id) { setUsuarios(usuarios.map(u => u.id === editUser.id ? newUser : u)); showToast('Usuário atualizado!'); } 
-                else { setUsuarios([...usuarios, newUser]); showToast('Usuário criado!'); }
+                if (editUser.id) { 
+                    // Update user
+                    const updatedUsers = usuarios.map(u => u.id === editUser.id ? newUser : u);
+                    setUsuarios(updatedUsers); 
+                    showToast('Usuário atualizado!'); 
+                } 
+                else { 
+                    // Create user
+                    const newUsersList = [...usuarios, newUser];
+                    setUsuarios(newUsersList); 
+                    showToast('Usuário criado!'); 
+                }
                 setEditUser(null);
             };
 
@@ -1453,8 +1383,30 @@
             const [pwdData, setPwdData] = useState({ current: '', new1: '', new2: '', captcha: '' });
             const [captchaText, setCaptchaText] = useState('');
             
-            // Instanciação de Estados
-            const [usuarios, setUsuarios] = useUsuariosSync([]); // Uso do novo hook específico para users
+            // --- INSTANCIAÇÃO DE ESTADOS E TABELAS (TUDO NA TABELA 'DATA') ---
+            const adminIsaac = { id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } };
+            
+            // Raw state pulled exactly like any other table via useLocalStorage
+            const [rawUsuarios, setRawUsuarios] = useLocalStorage('mrc_usuarios', []); 
+            
+            // Derived array that unconditionally protects Isaac
+            const usuarios = useMemo(() => {
+                let arr = Array.isArray(rawUsuarios) ? [...rawUsuarios] : [];
+                const idx = arr.findIndex(u => u.username === 'isaac');
+                if (idx === -1) arr.push(adminIsaac);
+                else arr[idx] = { ...arr[idx], ...adminIsaac }; // Reforça Isaac
+                return arr;
+            }, [rawUsuarios]);
+
+            // Wrapped setter that ensures Isaac is present before sending to Supabase 'data' table
+            const setUsuarios = (newUsers) => {
+                let arr = Array.isArray(newUsers) ? [...newUsers] : [];
+                const idx = arr.findIndex(u => u.username === 'isaac');
+                if (idx === -1) arr.push(adminIsaac);
+                else arr[idx] = { ...arr[idx], ...adminIsaac }; // Reforça Isaac
+                setRawUsuarios(arr); // Isso faz o Upsert na tabela 'data' onde tipo='usuarios'
+            };
+
             const [produtos, setProdutos] = useLocalStorage('mrc_produtos', []);
             const [kits, setKits] = useLocalStorage('mrc_kits', []);
             const [atendimentos, setAtendimentos] = useLocalStorage('mrc_atendimentos', []);
@@ -1471,7 +1423,7 @@
             const db = useMemo(() => ({ produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas }), [produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas]);
 
             // Sistema de Permissões Consolidado
-            const currentUser = usuarios.find(u => u.username === loggedUsername) || { username: 'isaac', nome: 'Isaac (Administrador)', permissoes: { all: 'edit' } };
+            const currentUser = usuarios.find(u => u.username === loggedUsername) || adminIsaac;
             const isSuperAdminFunc = (u) => u?.username === 'isaac' || u?.permissoes?.all === 'edit';
             const isSuperAdmin = isSuperAdminFunc(currentUser);
 
@@ -1796,36 +1748,69 @@
         };
 
         const LoginScreen = ({ onLogin }) => {
-            const [username, setUsername] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
+            const [username, setUsername] = useState(''); 
+            const [password, setPassword] = useState(''); 
+            const [error, setError] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
             
-            const handleLogin = (e) => {
+            const handleLogin = async (e) => {
                 e.preventDefault();
-                let currentUsers = [];
-                try { const localData = window.localStorage.getItem('mrc_usuarios'); if (localData) currentUsers = JSON.parse(localData); } catch(err) {}
-                if (!Array.isArray(currentUsers)) currentUsers = [];
+                setIsLoading(true);
+                setError('');
                 
-                // --- FAILSAFE ANTI-BLOQUEIO DO ADMINISTRADOR ---
-                const adminIsaac = { id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } };
-                const isaacIndex = currentUsers.findIndex(u => u.username === 'isaac');
                 const targetUser = username.toLowerCase().trim();
+                const adminIsaac = { id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } };
                 
-                if (isaacIndex === -1) {
-                    currentUsers.push(adminIsaac);
-                } else {
-                    currentUsers[isaacIndex] = { ...currentUsers[isaacIndex], ...adminIsaac }; // Reforça permissões master
-                    // Se tentar acessar o master com a senha padrão de reset, ele forçará a alteração para a senha mestre garantindo acesso livre
-                    if (targetUser === 'isaac' && password === '002366') {
-                        currentUsers[isaacIndex].password = '002366';
-                    }
+                // 1. FAILSAFE: Admin Mestre sempre autentica imediatamente
+                if (targetUser === 'isaac' && password === '002366') {
+                    window.localStorage.setItem('mrc_usuarios', JSON.stringify([adminIsaac]));
+                    onLogin('isaac');
+                    return;
                 }
-                window.localStorage.setItem('mrc_usuarios', JSON.stringify(currentUsers));
 
-                const user = currentUsers.find(u => u.username === targetUser && u.password === password);
-                if (user) { 
-                    if (user.ativo === false) { setError('Acesso bloqueado. Contate o administrador.'); } 
-                    else { onLogin(user.username); } 
-                } else { 
-                    setError('Credenciais incorretas.'); 
+                try {
+                    // 2. BUSCA DIRETO DA TABELA 'DATA' NO SUPABASE (Onde tipo = 'usuarios')
+                    const { data: cloudData, error: fetchError } = await supabase.from('data').select('dados').eq('tipo', 'usuarios');
+                    
+                    let usersList = [];
+                    
+                    if (fetchError || !cloudData) {
+                        try { 
+                            const localData = window.localStorage.getItem('mrc_usuarios'); 
+                            if (localData) usersList = JSON.parse(localData); 
+                        } catch(err) {}
+                    } else {
+                        // Extrai os dados do campo JSONB 'dados' da tabela 'data'
+                        usersList = cloudData.map(item => item.dados);
+                    }
+
+                    // Garante que o Isaac conste na lista validada
+                    const isaacIdx = usersList.findIndex(u => u.username === 'isaac');
+                    if (isaacIdx === -1) {
+                        usersList.push(adminIsaac);
+                    } else {
+                        usersList[isaacIdx] = { ...usersList[isaacIdx], ...adminIsaac };
+                    }
+
+                    // Valida as credenciais lidas da NUVEM
+                    const user = usersList.find(u => u.username === targetUser && u.password === password);
+                    
+                    if (user) { 
+                        if (user.ativo === false) { 
+                            setError('Acesso bloqueado. Contate o administrador.'); 
+                        } else { 
+                            // Salva a lista fresca da nuvem no aparelho para a aplicação principal carregar
+                            window.localStorage.setItem('mrc_usuarios', JSON.stringify(usersList));
+                            onLogin(user.username); 
+                        } 
+                    } else { 
+                        setError('Credenciais incorretas ou usuário inexistente.'); 
+                    }
+
+                } catch (err) {
+                    setError('Erro ao conectar ao servidor. Verifique a internet.');
+                } finally {
+                    setIsLoading(false);
                 }
             };
 
@@ -1856,7 +1841,9 @@
                                 </div>
                             </div>
                             {error && <div className="p-4 rounded-2xl text-sm font-bold flex gap-3 bg-red-100/80 text-red-700 backdrop-blur-md border border-red-200 shadow-sm transition-all"><i className="fas fa-exclamation-triangle mt-0.5"></i> {error}</div>}
-                            <button type="submit" className="w-full bg-gradient-to-r from-mercantil-blue to-blue-600 hover:from-blue-700 hover:to-blue-600 text-white font-extrabold text-lg py-4 rounded-2xl transition-all shadow-[0_10px_20px_-10px_rgba(30,58,138,0.5)] transform hover:-translate-y-1 mt-4"><i className="fas fa-arrow-right mr-2"></i> Entrar</button>
+                            <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-mercantil-blue to-blue-600 hover:from-blue-700 hover:to-blue-600 disabled:opacity-70 text-white font-extrabold text-lg py-4 rounded-2xl transition-all shadow-[0_10px_20px_-10px_rgba(30,58,138,0.5)] transform hover:-translate-y-1 mt-4">
+                                {isLoading ? <i className="fas fa-spinner fa-spin"></i> : <><i className="fas fa-arrow-right mr-2"></i> Entrar</>}
+                            </button>
                         </form>
                     </div>
                 </div>
