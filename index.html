@@ -125,7 +125,218 @@
         .dark .checkerboard {
             background-image: linear-gradient(45deg, #1e293b 25%, transparent 25%), linear-gradient(-45deg, #1e293b 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1e293b 75%), linear-gradient(-45deg, transparent 75%, #1e293b 75%);
         }
-    </style>
+    
+/* ===== Notification center and pending badges ===== */
+.notification-center { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 42px; }
+.notification-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .22s ease;
+  z-index: 10500;
+}
+.notification-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.nav-item { position: relative; }
+.nav-item .nav-label-wrap { display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; min-width: 0; width: 100%; padding-right: 4px; overflow: hidden; }
+.area-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  margin-right: 3px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--card-bg, #fff);
+  white-space: nowrap;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.area-badge.is-hidden { display: none; }
+.topbar-actions { display: inline-flex; align-items: center; justify-content: center; min-width: 52px; }
+.topbar-actions .notification-center { display: inline-flex; align-items: center; justify-content: center; }
+.notification-trigger {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  transition: transform .18s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.notification-trigger:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.notification-trigger.has-unread::after {
+  content: attr(data-unread);
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 2px var(--app-bg, var(--bg-primary, #fff));
+  pointer-events: none;
+}
+.notification-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(76vh, 720px);
+  overflow: auto;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg, #fff);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 32px 80px rgba(0,0,0,0.28);
+  opacity: 0;
+  transform: translate(-50%, calc(-50% - 10px)) scale(.98);
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 10501;
+}
+.notification-panel.is-open {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: auto;
+}
+.notification-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 4px 10px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 10px;
+}
+.notification-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.notification-subtitle { font-size: 12px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 8px; }
+.notification-list { display: flex; flex-direction: column; gap: 8px; }
+.notification-item {
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-secondary, var(--bg-tertiary, rgba(148,163,184,.08)));
+  display: grid;
+  gap: 6px;
+}
+.notification-item:hover { border-color: var(--accent-primary); box-shadow: var(--shadow-sm); }
+.notification-item.is-unread { border-color: color-mix(in srgb, var(--accent-primary) 55%, var(--border-color)); }
+.notification-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--text-secondary); }
+.notification-item-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.notification-item-title strong { font-size: 13px; color: var(--text-primary); }
+.notification-item-summary { font-size: 12px; color: var(--text-secondary); line-height: 1.45; }
+.notification-empty { padding: 18px 10px; text-align: center; font-size: 12px; color: var(--text-secondary); }
+
+.dark .notification-trigger {
+  background: rgba(15, 23, 42, 0.92);
+  color: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.22);
+}
+.dark .notification-trigger:hover {
+  background: rgba(30, 41, 59, 0.96);
+}
+.dark .notification-panel {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(2, 6, 23, 0.98) 100%);
+  color: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.18);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45), 0 32px 90px rgba(0,0,0,0.55);
+}
+.dark .notification-header {
+  border-bottom-color: rgba(148, 163, 184, 0.14);
+}
+.dark .notification-title {
+  color: #f8fafc;
+}
+.dark .notification-subtitle,
+.dark .notification-meta,
+.dark .notification-item-summary,
+.dark .notification-empty {
+  color: #cbd5e1;
+}
+.dark .notification-item {
+  background: rgba(30, 41, 59, 0.88);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+.dark .notification-item:hover {
+  border-color: rgba(96, 165, 250, 0.7);
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.35);
+}
+.dark .notification-item.is-unread {
+  border-color: rgba(96, 165, 250, 0.72);
+  background: rgba(30, 41, 59, 0.96);
+}
+.dark .notification-item-title strong {
+  color: #f8fafc;
+}
+.dark .notification-overlay {
+  background: rgba(2, 6, 23, 0.82);
+}
+
+.notification-refresh-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--success, #22c55e);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--success, #22c55e) 40%, transparent);
+  animation: subtlePulse 1.8s ease infinite;
+}
+@keyframes subtlePulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success, #22c55e) 35%, transparent); opacity: .9; }
+  70% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--success, #22c55e) 0%, transparent); opacity: .45; }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success, #22c55e) 0%, transparent); opacity: .9; }
+}
+
+/* ===== Fine alignment polish ===== */
+.nav-item .nav-label,
+.nav-item span:last-child:not(.area-badge) {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 0%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-item .area-badge.is-hidden { display: none !important; }
+.nav-item .area-badge.is-hidden + * { margin-right: 0; }
+
+@media (max-width: 900px) {
+  .notification-panel { width: min(520px, calc(100vw - 24px)); max-height: min(80vh, 720px); }
+  .topbar-actions { min-width: 44px; }
+}
+
+</style>
 </head>
 <body class="transition-colors duration-300">
     
@@ -536,8 +747,8 @@
 
         const getGlobalLinkOptions = (tipo, db) => {
             switch(tipo) {
-                case 'Produtos': return (db.produtos||[]).filter(p=>p.SKU).map(p => ({ id: p.SKU, label: `${p.SKU} - ${p['Título']?.substring(0,30)}` }));
-                case 'Kits': return (db.kits||[]).filter(k=>k.SKU).map(k => ({ id: k.SKU, label: `${k.SKU} - ${k['Título']?.substring(0,30)}` }));
+                case 'Produtos': return (db.produtos||[]).filter(p=>p.SKU).map(p => ({ id: p.SKU, label: `${p.SKU}${p['Código no SS'] ? ` • SS: ${p['Código no SS']}` : ''} - ${p['Título']?.substring(0,30)}` }));
+                case 'Kits': return (db.kits||[]).filter(k=>k.SKU).map(k => ({ id: k.SKU, label: `${k.SKU}${k['Código no SS'] ? ` • SS: ${k['Código no SS']}` : ''} - ${k['Título']?.substring(0,30)}` }));
                 case 'CRM (Atendimentos)': return (db.atendimentos||[]).filter(a=>a.protocolo).map(a => ({ id: a.protocolo, label: `${a.protocolo} - ${a.cliente}` }));
                 case 'Devoluções': return (db.devolucoes||[]).filter(d=>d.protocolo).map(d => ({ id: d.protocolo, label: `${d.protocolo} - ${d.cliente}` }));
                 case 'Qualidade': return (db.qualidade||[]).filter(q=>q.data).map(q => ({ id: q.id, label: `NC: ${q.data} - ${q.tipo}` }));
@@ -1603,6 +1814,11 @@
 
             const db = useMemo(() => ({ produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas, usuarios }), [produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas, usuarios]);
 
+            useEffect(() => {
+                window.__MRC_APP_STATE__ = { db, activeMenu, loggedUsername, darkMode };
+                window.dispatchEvent(new CustomEvent('mrc:state-updated', { detail: { db, activeMenu, loggedUsername, darkMode } }));
+            }, [db, activeMenu, loggedUsername, darkMode]);
+
             // Sistema de Permissões Consolidado
             const currentUser = usuarios.find(u => u.username === loggedUsername) || adminIsaac;
             const isSuperAdminFunc = (u) => u?.username === 'isaac' || u?.permissoes?.all === 'edit';
@@ -1724,7 +1940,7 @@
             ];
 
             const produtosConfig = [
-                { name: 'SKU', label: 'SKU *', required: true, half: true }, { name: 'Título', label: 'Título Produto *', required: true, full: true }, 
+                { name: 'SKU', label: 'SKU *', required: true, half: true }, { name: 'Código no SS', label: 'Código no SS', half: true }, { name: 'Título', label: 'Título Produto *', required: true, full: true }, 
                 { name: 'Status', label: 'Status', type: 'select', options: ['Ativo', 'Inativo', 'Rascunho'] }, { name: 'Índice', label: 'Índice' }, { name: 'Material', label: 'Material' }, 
                 { name: 'Status Fiscal', label: 'Status Fiscal' }, { name: 'Status Dimensões', label: 'Status Dimensões', half: true }, { name: 'Peso (kg)', label: 'Peso (kg)', type: 'number', step: '0.001', half: true }, 
                 { name: 'Comprimento (cm)', label: 'Comp.', type: 'number', step: '0.1' }, { name: 'Largura (cm)', label: 'Largura', type: 'number', step: '0.1' }, { name: 'Altura (cm)', label: 'Altura', type: 'number', step: '0.1' }, 
@@ -1732,7 +1948,7 @@
             ];
 
             const kitsConfig = [
-                { name: 'SKU', label: 'SKU Kit *', required: true, half: true }, { name: 'Título', label: 'Título Kit *', required: true, full: true }, 
+                { name: 'SKU', label: 'SKU Kit *', required: true, half: true }, { name: 'Código no SS', label: 'Código no SS', half: true }, { name: 'Título', label: 'Título Kit *', required: true, full: true }, 
                 { name: 'Status', label: 'Status', type: 'select', options: ['Ativo', 'Inativo', 'Rascunho'] }, { name: 'Índice', label: 'Índice' }, { name: 'Material', label: 'Material' }, 
                 { name: 'Status Fiscal', label: 'Status Fiscal' }, { name: 'Status Dimensões', label: 'Status Dimensões', half: true }, { name: 'Peso (kg)', label: 'Peso Total', type: 'number', step: '0.001', half: true }, 
                 { name: 'Comprimento (cm)', label: 'Comp.', type: 'number', step: '0.1' }, { name: 'Largura (cm)', label: 'Largura', type: 'number', step: '0.1' }, { name: 'Altura (cm)', label: 'Altura', type: 'number', step: '0.1' }, 
@@ -1741,6 +1957,7 @@
 
             const catalogColumns = [
                 { field: 'SKU', header: 'SKU', render: (val) => <span className="font-mono font-extrabold cursor-pointer hover:text-mercantil-blue transition-colors" onClick={(e)=>{ e.stopPropagation(); copyToClipboard(val, showToast); }}><i className="fas fa-barcode opacity-50 mr-1"></i> {val}</span> },
+                { field: 'Código no SS', header: 'Código no SS', render: (val) => val ? <span className="font-mono text-xs font-bold opacity-80">{val}</span> : <span className="opacity-40 text-xs italic">Sem código</span> },
                 { field: 'Título', header: 'Título', render: (val) => <span className="font-bold">{val}</span> },
                 { field: 'Status', header: 'Status', render: (val) => <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${val==='Ativo'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}`}>{val || 'N/A'}</span> },
                 { field: 'EAN/GTIN', header: 'EAN', render: (val) => val ? <span className="opacity-60 text-xs font-mono">{String(val).substring(0,10)}...</span> : <span className="opacity-40 text-xs italic">Sem EAN</span> }
@@ -1793,8 +2010,9 @@
                 if(checkPerm(id === 'image-editor' || id === 'image-converter' || id === 'image-optimizer' ? 'ferramentas' : id) === 'none' && id !== 'painel') return null;
                 const isActive = activeMenu === id;
                 return (
-                    <button onClick={() => { setActiveMenu(id); if (window.innerWidth < 1024) setIsSidebarOpen(false); }} className={`w-full flex items-center px-5 py-3.5 mb-1 rounded-2xl transition-all font-bold ${isActive ? 'bg-white/60 dark:bg-slate-800/80 text-mercantil-blue dark:text-blue-400 shadow-sm border border-white/40 dark:border-white/5' : 'text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5'} ${sub ? 'pl-10 py-2.5 text-sm opacity-80' : ''}`}>
-                        <i className={`${icon} w-7 text-center text-lg ${isActive ? 'text-mercantil-orange' : 'opacity-70'}`}></i> <span>{label}</span>
+                    <button onClick={() => { setActiveMenu(id); if (window.innerWidth < 1024) setIsSidebarOpen(false); }} className={`w-full flex items-center px-5 py-3.5 mb-1 rounded-2xl transition-all font-bold nav-item ${isActive ? 'bg-white/60 dark:bg-slate-800/80 text-mercantil-blue dark:text-blue-400 shadow-sm border border-white/40 dark:border-white/5' : 'text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5'} ${sub ? 'pl-10 py-2.5 text-sm opacity-80' : ''}`}>
+                        <i className={`${icon} flex-shrink-0 w-7 text-center text-lg ${isActive ? 'text-mercantil-orange' : 'opacity-70'}`}></i>
+                        <span className="nav-label-wrap ml-2"><span className="nav-label">{label}</span></span>
                     </button>
                 );
             };
@@ -1866,24 +2084,33 @@
                     </div>
 
                     {/* Cabeçalho Mobile */}
-                    <div className="lg:hidden fixed top-0 left-0 right-0 glass-panel border-b border-black/5 dark:border-white/5 z-[60] p-4 flex justify-between items-center w-full">
-                        <div className="flex gap-4 items-center"><button onClick={() => setIsSidebarOpen(true)} className="w-10 h-10 rounded-xl bg-black/5 dark:bg-white/10 flex items-center justify-center"><i className="fas fa-bars text-lg"></i></button><div className="font-extrabold text-mercantil-blue dark:text-blue-400 text-lg flex items-center gap-2 tracking-tight"><LogoMercantil /> MERCANTIL</div></div>
-                        <button onClick={() => setDarkMode(!darkMode)} className="w-10 h-10 rounded-full bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/20 transition-colors flex items-center justify-center"><i className={`fas ${darkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-slate-600'} text-lg`}></i></button>
+                    <div className="lg:hidden fixed top-0 left-0 right-0 glass-panel border-b border-black/5 dark:border-white/5 z-[60] px-4 w-full grid items-center" style={{gridTemplateColumns:'1fr auto 1fr',minHeight:'60px'}}>
+                        <div className="flex gap-3 items-center min-w-0">
+                            <button onClick={() => setIsSidebarOpen(true)} className="w-10 h-10 rounded-xl bg-black/5 dark:bg-white/10 flex items-center justify-center flex-shrink-0" aria-label="Abrir menu">
+                                <i className="fas fa-bars text-lg"></i>
+                            </button>
+                            <div className="font-extrabold text-mercantil-blue dark:text-blue-400 text-base flex items-center gap-2 tracking-tight overflow-hidden"><LogoMercantil /><span className="truncate">MERCANTIL</span></div>
+                        </div>
+                        <div className="topbar-actions" style={{display:'flex',alignItems:'center',justifyContent:'center',minWidth:'52px'}}></div>
+                        <div className="flex items-center justify-end">
+                            <button onClick={() => setDarkMode(!darkMode)} className="w-10 h-10 rounded-full bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/20 transition-colors flex items-center justify-center"><i className={`fas ${darkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-slate-600'} text-lg`}></i></button>
+                        </div>
                     </div>
 
-                    <main className="flex-1 flex flex-col h-full overflow-hidden mt-[76px] lg:mt-0 relative w-full">
+                    <main className="flex-1 flex flex-col h-full overflow-hidden mt-[60px] lg:mt-0 relative w-full">
                         {/* Cabeçalho Desktop */}
-                        <header className="glass-panel border-b border-black/5 dark:border-white/5 px-8 py-5 hidden lg:flex justify-between items-center shadow-sm w-full relative z-[60]">
-                            <div className="flex items-center gap-4">
-                                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="w-10 h-10 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 flex items-center justify-center transition-colors">
-                                    <i className="fas fa-bars text-lg opacity-80"></i>
+                        <header className="glass-panel border-b border-black/5 dark:border-white/5 px-6 hidden lg:grid items-center shadow-sm w-full relative z-[60]" style={{gridTemplateColumns:'1fr auto 1fr', minHeight:'66px'}}>
+                            <div className="flex items-center gap-4 min-w-0">
+                                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="w-10 h-10 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 flex items-center justify-center transition-colors flex-shrink-0" aria-label={isSidebarOpen ? 'Fechar menu lateral' : 'Abrir menu lateral'}>
+                                    <i className={`fas ${isSidebarOpen ? 'fa-chevron-left' : 'fa-chevron-right'} text-sm opacity-80`}></i>
                                 </button>
-                                <h2 className="text-2xl font-extrabold capitalize flex items-center gap-3 tracking-tight">
-                                    {activeMenu.replace('-', ' ')}
-                                    {isReadOnly(activeMenu) && activeMenu !== 'painel' && activeMenu !== 'ferramentas' && activeMenu !== 'dados' && <span className="text-[10px] bg-red-100 text-red-600 border border-red-200 px-2.5 py-1 rounded-lg uppercase tracking-widest font-extrabold shadow-sm"><i className="fas fa-eye mr-1"></i> Somente Leitura</span>}
+                                <h2 className="text-xl font-extrabold capitalize flex items-center gap-3 tracking-tight min-w-0 overflow-hidden">
+                                    <span className="truncate">{activeMenu.replace('-', ' ')}</span>
+                                    {isReadOnly(activeMenu) && activeMenu !== 'painel' && activeMenu !== 'ferramentas' && activeMenu !== 'dados' && <span className="text-[10px] bg-red-100 text-red-600 border border-red-200 px-2.5 py-1 rounded-lg uppercase tracking-widest font-extrabold shadow-sm flex-shrink-0"><i className="fas fa-eye mr-1"></i> Somente Leitura</span>}
                                 </h2>
                             </div>
-                            <div className="flex items-center gap-6">
+                            <div className="topbar-actions" style={{display:'flex',alignItems:'center',justifyContent:'center',minWidth:'52px'}}></div>
+                            <div className="flex items-center gap-4 justify-end">
                                 <div className="relative">
                                     <div onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className="h-11 w-11 rounded-full bg-gradient-to-br from-mercantil-blue to-blue-600 text-white flex items-center justify-center font-bold shadow-lg cursor-pointer hover:scale-105 transition-transform border-2 border-white/50"><i className="fas fa-user-astronaut text-xl"></i></div>
                                     {isUserMenuOpen && (
@@ -2078,6 +2305,425 @@
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
-    </script>
+    
+(function(){
+  const appScope = window;
+  const STORAGE_KEYS = {
+    events: 'portalNotificationsEvents',
+    read: 'portalNotificationsRead',
+    signatures: 'portalNotificationsSignatures'
+  };
+  const AREA_LABELS = {
+    tarefas: 'Tarefas',
+    notas: 'Notas',
+    crm: 'CRM',
+    devolucoes: 'Devoluções',
+    catalogo: 'Catálogo',
+    fretes: 'Fretes',
+    marketing: 'Marketing',
+    gerencia: 'Gerência',
+    compliance: 'Compliance',
+    usuarios: 'Usuários'
+  };
+  const NAV_CANDIDATES = {
+    painel: ['painel'],
+    crm: ['crm'],
+    devolucoes: ['devolu', 'devoluções'],
+    catalogo: ['catálogo', 'catalogo'],
+    fretes: ['fretes', 'frete'],
+    marketing: ['marketing'],
+    gerencia: ['gerência', 'gerencia'],
+    compliance: ['compliance'],
+    tarefas: ['tarefas'],
+    notas: ['notas'],
+    usuarios: ['usuários', 'usuarios']
+  };
+  const COLLECTION_KEYS = {
+    crm: ['mrc_atendimentos'],
+    devolucoes: ['mrc_devolucoes'],
+    tarefas: ['mrc_tarefas'],
+    notas: ['mrc_notas'],
+    catalogo: ['mrc_produtos', 'mrc_kits'],
+    fretes: ['mrc_fretes'],
+    marketing: ['mrc_marketing'],
+    gerencia: ['mrc_gerencia'],
+    compliance: ['mrc_compliance'],
+    usuarios: ['mrc_usuarios']
+  };
+  const readJSON = (key, fallback) => {
+    try {
+      const value = localStorage.getItem(key);
+      return value ? JSON.parse(value) : fallback;
+    } catch (_) {
+      return fallback;
+    }
+  };
+  const writeJSON = (key, value) => {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
+  };
+  const normalizeText = (value) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const formatDate = (value) => {
+    if (!value) return 'Agora';
+    const d = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(d.getTime()) ? String(value) : new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(d);
+  };
+  const shortText = (value, max = 132) => {
+    const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+    return text.length > max ? text.slice(0, max - 1) + '…' : text;
+  };
+  const pick = (...values) => values.find((v) => v !== undefined && v !== null && String(v).trim() !== '');
+  function getState() {
+    return appScope.__MRC_APP_STATE__ || { db: null, activeMenu: null, loggedUsername: null };
+  }
+  function currentUsername() {
+    const st = getState();
+    return normalizeText(st.loggedUsername || sessionStorage.getItem('mrc_auth_user') || '');
+  }
+  function getDb() {
+    return getState().db || {
+      atendimentos: readJSON('mrc_atendimentos', []),
+      devolucoes: readJSON('mrc_devolucoes', []),
+      tarefas: readJSON('mrc_tarefas', []),
+      notas: readJSON('mrc_notas', []),
+      produtos: readJSON('mrc_produtos', []),
+      kits: readJSON('mrc_kits', []),
+      fretes: readJSON('mrc_fretes', []),
+      marketing: readJSON('mrc_marketing', []),
+      gerencia: readJSON('mrc_gerencia', []),
+      compliance: readJSON('mrc_compliance', []),
+      usuarios: readJSON('mrc_usuarios', [])
+    };
+  }
+  function ensureNotificationUI() {
+    let trigger = document.getElementById('notificationTrigger');
+    let panel = document.getElementById('notificationPanel');
+    let listEl = document.getElementById('notificationList');
+    let markAllBtn = document.getElementById('notificationMarkAll');
+    const overlay = document.getElementById('notificationOverlay');
+    if (trigger && panel && listEl) return { trigger, panel, listEl, markAllBtn, overlay };
+    const hostCandidates = Array.from(document.querySelectorAll('header button, header .flex, header .items-center, .topbar-actions, .header-actions')).map(el => el.parentElement || el);
+    const header = document.querySelector('header');
+    const host = document.querySelector('.topbar-actions') || hostCandidates.find(Boolean) || header;
+    if (!host) return null;
+    const center = document.createElement('div');
+    center.className = 'notification-center';
+    center.id = 'notificationCenter';
+    center.innerHTML = `
+      <button class="notification-trigger" id="notificationTrigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="notificationPanel" title="Notificações">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M15 17h5l-1.4-1.4a2 2 0 0 1-.6-1.4V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5"></path>
+          <path d="M9.75 17a2.25 2.25 0 0 0 4.5 0"></path>
+        </svg>
+      </button>`;
+    // Overlay vai para o body para sobrepor TUDO (igual ao modal do Kanban)
+    const overlayEl = document.createElement('div');
+    overlayEl.className = 'notification-overlay';
+    overlayEl.id = 'notificationOverlay';
+    overlayEl.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(overlayEl);
+    // Panel vai para o body também
+    const panelEl = document.createElement('div');
+    panelEl.className = 'notification-panel';
+    panelEl.id = 'notificationPanel';
+    panelEl.setAttribute('role', 'dialog');
+    panelEl.setAttribute('aria-modal', 'true');
+    panelEl.setAttribute('aria-label', 'Central de notificações');
+    panelEl.setAttribute('aria-hidden', 'true');
+    panelEl.innerHTML = `
+        <div class="notification-header">
+          <div>
+            <div class="notification-title">Notificações</div>
+            <div class="notification-subtitle"><span class="notification-refresh-dot" aria-hidden="true"></span> Atualização automática discreta da base</div>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="notificationMarkAll">Marcar lidas</button>
+        </div>
+        <div class="notification-list" id="notificationList"></div>`;
+    document.body.appendChild(panelEl);
+    // Inserir trigger (botão sino) na .topbar-actions do header visível
+    const topbarSlot = document.querySelector('.topbar-actions');
+    if (topbarSlot) {
+      topbarSlot.innerHTML = '';
+      topbarSlot.appendChild(center);
+    } else {
+      host.insertBefore(center, host.firstChild);
+    }
+    trigger = center.querySelector('#notificationTrigger');
+    panel = document.getElementById('notificationPanel');
+    listEl = document.getElementById('notificationList');
+    markAllBtn = document.getElementById('notificationMarkAll');
+    const overlayRef = document.getElementById('notificationOverlay');
+    return { trigger, panel, listEl, markAllBtn, overlay: overlayRef };
+  }
+  function navEntries() {
+    return Array.from(document.querySelectorAll('aside button, aside a')).map((el) => {
+      const text = normalizeText(el.textContent);
+      const area = Object.entries(NAV_CANDIDATES).find(([_, aliases]) => aliases.some((alias) => text.includes(normalizeText(alias))))?.[0];
+      return area ? { el, area } : null;
+    }).filter(Boolean);
+  }
+  function ensureBadge(entry) {
+    let badge = entry.el.querySelector('.area-badge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'area-badge is-hidden';
+      badge.setAttribute('aria-label', 'Itens pendentes');
+      const target = entry.el.querySelector('span:last-child') || entry.el;
+      target.appendChild(badge);
+    }
+    return badge;
+  }
+  function isClosedLike(item) {
+    const bag = [item.status, item.situacao, item.situação, item.state, item.etapa, item.progress, item.resultado].map(normalizeText).join(' ');
+    return ['concluid', 'encerrad', 'finalizad', 'resolvid', 'done', 'closed', 'cancelad', 'arquivad'].some((token) => bag.includes(token));
+  }
+  function matchesUser(item) {
+    const user = currentUsername();
+    if (!user) return true;
+    const bag = [item.responsavel, item.responsável, item.usuario, item.user, item.assignedTo, item.vinculadoA, item.vinculado, item.nome].map(normalizeText).filter(Boolean).join(' | ');
+    return !bag || bag.includes(user);
+  }
+  function pendingCounts(db) {
+    return {
+      crm: (db.atendimentos || []).filter((item) => item && !isClosedLike(item)).length,
+      devolucoes: (db.devolucoes || []).filter((item) => item && !isClosedLike(item)).length,
+      tarefas: (db.tarefas || []).filter((item) => item && !isClosedLike(item)).length,
+      notas: (db.notas || []).filter((item) => item && !item.lida && !item.read).length,
+      catalogo: [...(db.produtos || []), ...(db.kits || [])].filter((item) => item && !isClosedLike(item) && (item.pendente || item.pendencia || item.ativo === false || item.status === 'Pendente')).length,
+      fretes: (db.fretes || []).filter((item) => item && (item.status ? !isClosedLike(item) : true)).length,
+      marketing: (db.marketing || []).filter((item) => item && !isClosedLike(item) && (item.pendente || item.status || item.aprovacao || item.aprovação)).length,
+      gerencia: (db.gerencia || []).filter((item) => item && !isClosedLike(item)).length,
+      compliance: (db.compliance || []).filter((item) => item && !isClosedLike(item)).length,
+      usuarios: (db.usuarios || []).filter((item) => item && (item.pendencia || item.convitePendente || normalizeText(item.status) === 'pendente')).length
+    };
+  }
+  function fingerprint(item, area, type) {
+    return [area, type, pick(item.id, item.ID, item.protocolo, item.codigo, item.numero, item.titulo, item.title, item.nome), pick(item.createdAt, item.dataCriacao, item.dataCadastro, item.date, item.data, item.updatedAt)].map(String).join('|');
+  }
+  function buildEvents(db) {
+    const signatures = readJSON(STORAGE_KEYS.signatures, {});
+    const events = readJSON(STORAGE_KEYS.events, []);
+    const nextEvents = [...events];
+    const pushIfNew = (event, item) => {
+      const id = fingerprint(item, event.area, event.type);
+      if (signatures[id]) return;
+      signatures[id] = pick(item.updatedAt, item.updated_at, item.dataCriacao, item.dataCadastro, item.createdAt, item.date, item.data, new Date().toISOString());
+      nextEvents.unshift({
+        id,
+        area: event.area,
+        type: event.type,
+        title: event.title,
+        summary: shortText(event.summary),
+        actor: pick(item.responsavel, item.responsável, item.autor, item.user, item.usuario, item.createdBy, item.criadoPor, 'Sistema'),
+        when: signatures[id],
+        targetId: pick(item.id, item.ID, item.protocolo, item.codigo, item.numero),
+        targetText: pick(item.titulo, item.title, item.assunto, item.nome, item.descricao, item.descrição, item.cliente),
+        menu: event.menu
+      });
+    };
+    (db.atendimentos || []).forEach((item) => {
+      if (!item || isClosedLike(item) || !pick(item.protocolo, item.numero, item.id)) return;
+      pushIfNew({ area: 'crm', menu: 'crm', type: 'new-crm-protocol', title: 'Novo protocolo no CRM', summary: `Protocolo ${pick(item.protocolo, item.numero, item.id)} · ${pick(item.assunto, item.cliente, item.descricao, 'Sem resumo')}` }, item);
+    });
+    (db.devolucoes || []).forEach((item) => {
+      if (!item || isClosedLike(item) || !pick(item.protocolo, item.numero, item.id)) return;
+      pushIfNew({ area: 'devolucoes', menu: 'devolucoes', type: 'new-return-protocol', title: 'Novo protocolo em Devoluções', summary: `Protocolo ${pick(item.protocolo, item.numero, item.id)} · ${pick(item.assunto, item.cliente, item.descricao, 'Sem resumo')}` }, item);
+    });
+    (db.tarefas || []).forEach((item) => {
+      if (!item || isClosedLike(item) || !matchesUser(item)) return;
+      const hasLink = [item.vinculadoA, item.vinculado, item.assignedTo, item.usuario, item.user, item.responsavel, item.responsável].some(Boolean);
+      if (!hasLink) return;
+      pushIfNew({ area: 'tarefas', menu: 'tarefas', type: 'task-linked', title: 'Você foi vinculado(a) em uma tarefa', summary: pick(item.titulo, item.title, item.descricao, item.descrição, 'Tarefa sem resumo') }, item);
+    });
+    (db.notas || []).forEach((item) => {
+      if (!item || !matchesUser(item)) return;
+      const hasLink = [item.vinculadoA, item.vinculado, item.assignedTo, item.usuario, item.user, item.responsavel, item.responsável].some(Boolean) || !item.lida || !item.read;
+      if (!hasLink) return;
+      pushIfNew({ area: 'notas', menu: 'notas', type: 'note-linked', title: 'Você foi vinculado(a) em uma nota', summary: pick(item.titulo, item.title, item.descricao, item.descrição, 'Nota sem resumo') }, item);
+    });
+    nextEvents.sort((a, b) => new Date(b.when).getTime() - new Date(a.when).getTime());
+    writeJSON(STORAGE_KEYS.events, nextEvents.slice(0, 100));
+    writeJSON(STORAGE_KEYS.signatures, signatures);
+    return nextEvents.slice(0, 30);
+  }
+  function renderEvents(ui, events) {
+    const readMap = readJSON(STORAGE_KEYS.read, {});
+    const unread = events.filter((event) => !readMap[event.id]).length;
+    ui.trigger.classList.toggle('has-unread', unread > 0);
+    if (unread > 0) ui.trigger.setAttribute('data-unread', unread > 99 ? '99+' : String(unread));
+    else ui.trigger.removeAttribute('data-unread');
+    if (!events.length) {
+      ui.listEl.innerHTML = '<div class="notification-empty">Nenhuma notificação nova no momento.</div>';
+      return;
+    }
+    ui.listEl.innerHTML = events.map((event) => `
+      <button type="button" class="notification-item ${readJSON(STORAGE_KEYS.read, {})[event.id] ? '' : 'is-unread'}" data-notification-id="${event.id}" data-menu="${event.menu || event.area}">
+        <div class="notification-item-title">
+          <strong>${event.title}</strong>
+          <span class="badge badge-accent">${AREA_LABELS[event.area] || event.area}</span>
+        </div>
+        <div class="notification-item-summary">${event.summary}</div>
+        <div class="notification-meta">
+          <span>Quem: ${shortText(event.actor, 42)}</span>
+          <span>Quando: ${formatDate(event.when)}</span>
+          <span>Onde: ${AREA_LABELS[event.area] || event.area}</span>
+          ${event.targetId ? `<span>ID: ${event.targetId}</span>` : ''}
+        </div>
+      </button>
+    `).join('');
+  }
+  function setMenu(menu) {
+    const target = navEntries().find((entry) => entry.area === menu || entry.area === (menu || '').toLowerCase());
+    if (target) {
+      target.el.click();
+      target.el.scrollIntoView({ block: 'nearest' });
+    }
+  }
+  function highlightTarget(eventData) {
+    const needles = [eventData.targetId, eventData.targetText, eventData.summary].filter(Boolean).map(normalizeText);
+    const candidates = Array.from(document.querySelectorAll('main tr, main .rounded-2xl, main .rounded-xl, main .card, main [role="row"], main .shadow-sm, main .shadow-md'));
+    const target = candidates.find((el) => {
+      const hay = normalizeText(el.textContent);
+      return needles.some((needle) => needle && hay.includes(needle));
+    });
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.classList.add('notification-target-flash');
+      setTimeout(() => target.classList.remove('notification-target-flash'), 1800);
+    }
+  }
+
+  function arrangeHeaderIcons() {
+    const ui = ensureNotificationUI();
+    if (!ui) return null;
+    // Sincronizar o notification-center com a .topbar-actions visível
+    // (Desktop e Mobile têm cada um a sua própria .topbar-actions no JSX)
+    const center = document.getElementById('notificationCenter') || ui.trigger.closest('.notification-center') || ui.trigger.parentElement;
+    const allSlots = Array.from(document.querySelectorAll('.topbar-actions'));
+    // Escolher o slot do header visível
+    const isDesktop = window.innerWidth >= 1024;
+    const visibleHeader = isDesktop
+      ? document.querySelector('header.glass-panel')
+      : document.querySelector('.lg\:hidden.glass-panel, .lg\:hidden.fixed.glass-panel');
+    const targetSlot = (visibleHeader && visibleHeader.querySelector('.topbar-actions')) || allSlots[0];
+    if (targetSlot && center && center.parentElement !== targetSlot) {
+      // Limpar outros slots para evitar duplicatas sem destruir o nó já vinculado
+      allSlots.forEach((s) => {
+        if (s !== targetSlot) {
+          const existingCenter = s.querySelector('#notificationCenter');
+          if (existingCenter) existingCenter.remove();
+        }
+      });
+      const staleChildren = Array.from(targetSlot.children).filter((child) => child !== center);
+      staleChildren.forEach((child) => child.remove());
+      targetSlot.appendChild(center);
+    }
+    return ui;
+  }
+
+  function bindUI(ui) {
+    if (ui.__bound) return;
+    ui.__bound = true;
+    const closePanel = () => {
+      ui.panel.classList.remove('is-open');
+      ui.overlay && ui.overlay.classList.remove('is-open');
+      ui.panel.setAttribute('aria-hidden', 'true');
+      ui.overlay && ui.overlay.setAttribute('aria-hidden', 'true');
+      ui.trigger.setAttribute('aria-expanded', 'false');
+    };
+    const openPanel = () => {
+      ui.panel.classList.add('is-open');
+      ui.overlay && ui.overlay.classList.add('is-open');
+      ui.panel.setAttribute('aria-hidden', 'false');
+      ui.overlay && ui.overlay.setAttribute('aria-hidden', 'false');
+      ui.trigger.setAttribute('aria-expanded', 'true');
+    };
+    ui.trigger.addEventListener('click', (event) => {
+      event.stopPropagation();
+      ui.panel.classList.contains('is-open') ? closePanel() : openPanel();
+    });
+    ui.markAllBtn && ui.markAllBtn.addEventListener('click', () => {
+      const events = readJSON(STORAGE_KEYS.events, []);
+      const readMap = readJSON(STORAGE_KEYS.read, {});
+      events.forEach((event) => { readMap[event.id] = true; });
+      writeJSON(STORAGE_KEYS.read, readMap);
+      renderEvents(ui, events.slice(0, 30));
+    });
+    ui.listEl.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-notification-id]');
+      if (!button) return;
+      const id = button.getAttribute('data-notification-id');
+      const events = readJSON(STORAGE_KEYS.events, []);
+      const eventData = events.find((item) => item.id === id);
+      if (!eventData) return;
+      const readMap = readJSON(STORAGE_KEYS.read, {});
+      readMap[id] = true;
+      writeJSON(STORAGE_KEYS.read, readMap);
+      renderEvents(ui, events.slice(0, 30));
+      setMenu(button.getAttribute('data-menu'));
+      setTimeout(() => highlightTarget(eventData), 250);
+      closePanel();
+    });
+    ui.overlay && ui.overlay.addEventListener('click', closePanel);
+    document.addEventListener('click', (event) => {
+      if (!ui.panel.contains(event.target) && !ui.trigger.contains(event.target) && !(ui.overlay && ui.overlay.contains(event.target))) closePanel();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closePanel();
+    });
+  }
+  function updateBadges(db) {
+    const counts = pendingCounts(db);
+    navEntries().forEach((entry) => {
+      if (entry.area === 'painel') return;
+      const badge = ensureBadge(entry);
+      const count = counts[entry.area] || 0;
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.classList.toggle('is-hidden', count <= 0);
+    });
+  }
+  function refresh() {
+    const ui = arrangeHeaderIcons() || ensureNotificationUI();
+    if (!ui) return;
+    bindUI(ui);
+    const db = getDb();
+    updateBadges(db);
+    const events = buildEvents(db);
+    renderEvents(ui, events);
+  }
+  const style = document.createElement('style');
+  style.textContent = `.notification-target-flash { outline: 2px solid var(--accent-primary, #2563eb) !important; outline-offset: 2px; box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-primary, #2563eb) 16%, transparent) !important; transition: box-shadow .18s ease, outline-color .18s ease; }`;
+  document.head.appendChild(style);
+  let timer = null;
+  const scheduleRefresh = () => {
+    clearTimeout(timer);
+    timer = setTimeout(refresh, 80);
+  };
+  appScope.addEventListener('storage', (event) => {
+    if (!event.key || Object.values(COLLECTION_KEYS).flat().includes(event.key)) scheduleRefresh();
+  });
+  appScope.addEventListener('mrc:state-updated', scheduleRefresh);
+  document.addEventListener('DOMContentLoaded', scheduleRefresh);
+  scheduleRefresh();
+  setInterval(scheduleRefresh, 15000);
+  appScope.__notificationRefresh = refresh;
+})();
+
+
+window.__MRC_NOTIFICATION_SELFTEST__ = function(){
+  const now = new Date().toISOString();
+  const auth = sessionStorage.getItem('mrc_auth_user') || 'isaac';
+  const push = (key, item) => {
+    const arr = JSON.parse(localStorage.getItem(key) || '[]');
+    arr.unshift(item);
+    localStorage.setItem(key, JSON.stringify(arr));
+  };
+  push('mrc_atendimentos', { id: 'test-crm-'+Date.now(), protocolo: 'CRM-'+Date.now(), cliente: 'Cliente Teste', assunto: 'Novo protocolo teste', status: 'Em aberto', responsavel: auth, createdAt: now });
+  push('mrc_devolucoes', { id: 'test-dev-'+Date.now(), protocolo: 'DEV-'+Date.now(), cliente: 'Cliente Teste', assunto: 'Nova devolução teste', status: 'Pendente', responsavel: auth, createdAt: now });
+  push('mrc_tarefas', { id: 'test-task-'+Date.now(), titulo: 'Tarefa teste vinculada', status: 'Em andamento', responsavel: auth, createdAt: now });
+  push('mrc_notas', { id: 'test-note-'+Date.now(), titulo: 'Nota teste vinculada', read: false, responsavel: auth, createdAt: now });
+  if (window.__notificationRefresh) window.__notificationRefresh();
+};
+
+</script>
 </body>
 </html>
