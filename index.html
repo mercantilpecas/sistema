@@ -145,29 +145,92 @@
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJpbmpvanBtY29iZHdkZm9md3RxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTg5MzcsImV4cCI6MjA5NjU5NDkzN30.-GvQXCJqGZ9uyf2nmc84mnPImUuhmKYDbZaRGLGhcww';
         const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-        // --- HOOK CUSTOMIZADO PARA SUPABASE ---
+        // --- HOOKS CUSTOMIZADOS PARA SUPABASE ---
+
+        // Hook Específico para Usuários (Tabela `users`)
+        function useUsuariosSync(initialValue) {
+            const key = 'mrc_usuarios';
+            const adminIsaac = { id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } };
+
+            // Garante que o Isaac sempre exista e esteja blindado
+            const ensureIsaac = (usersArray) => {
+                let arr = Array.isArray(usersArray) ? [...usersArray] : [];
+                const idx = arr.findIndex(u => u.username === 'isaac');
+                if (idx === -1) {
+                    arr.push(adminIsaac);
+                } else {
+                    arr[idx] = { ...arr[idx], ...adminIsaac }; 
+                }
+                return arr;
+            };
+
+            const [storedValue, setStoredValue] = useState(() => {
+                try {
+                    const item = window.localStorage.getItem(key);
+                    let val = (!item || item === 'null' || item === 'undefined') ? initialValue : JSON.parse(item);
+                    return ensureIsaac(val);
+                } catch (error) { return ensureIsaac(initialValue); }
+            });
+
+            // Sincronização inicial e realtime com a tabela 'users'
+            useEffect(() => {
+                let isMounted = true;
+                const fetchFromSupabase = async () => {
+                    const { data, error } = await supabase.from('users').select('*');
+                    if (!error && data && isMounted) {
+                        const validatedData = ensureIsaac(data);
+                        setStoredValue(validatedData);
+                        window.localStorage.setItem(key, JSON.stringify(validatedData));
+                    }
+                };
+                fetchFromSupabase();
+
+                const channel = supabase.channel('public:users')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => { fetchFromSupabase(); })
+                    .subscribe();
+
+                return () => { isMounted = false; supabase.removeChannel(channel); };
+            }, []);
+
+            const setValue = async (value) => {
+                try {
+                    let valueToStore = value instanceof Function ? value(storedValue) : value;
+                    valueToStore = ensureIsaac(valueToStore);
+
+                    setStoredValue(valueToStore);
+                    window.localStorage.setItem(key, JSON.stringify(valueToStore));
+
+                    // Atualiza a nuvem na tabela 'users'
+                    const oldValue = Array.isArray(storedValue) ? storedValue : [];
+                    const newIds = new Set(valueToStore.map(v => String(v.id)));
+                    const deletedItems = oldValue.filter(v => !newIds.has(String(v.id)));
+
+                    if (valueToStore.length > 0) {
+                        await supabase.from('users').upsert(valueToStore);
+                    }
+                    
+                    for (let item of deletedItems) {
+                        // Segurança extra: nunca apaga o Isaac da nuvem
+                        if (item.username !== 'isaac') {
+                            await supabase.from('users').delete().eq('id', String(item.id));
+                        }
+                    }
+
+                } catch (error) { console.error("Erro de sincronização com Supabase (users):", error); }
+            };
+
+            return [storedValue, setValue];
+        }
+
+        // Hook Genérico para os demais dados (Tabela `data`)
         function useLocalStorage(key, initialValue) {
-            // REMOVIDO: 'mrc_usuarios' para que ele sincronize com o Supabase.
             const isLocalOnly = key === 'mrc_theme_dark' || key === 'mrc_last_backup_time';
             const tipo = key.replace('mrc_', ''); 
 
             const [storedValue, setStoredValue] = useState(() => {
                 try {
                     const item = window.localStorage.getItem(key);
-                    let val = (!item || item === 'null' || item === 'undefined') ? initialValue : JSON.parse(item);
-                    
-                    // PROTEÇÃO DO ADMIN ISAAC (Força existência e permissões totais no load local)
-                    if (tipo === 'usuarios') {
-                        if (!Array.isArray(val)) val = [];
-                        const hasIsaac = val.find(u => u.username === 'isaac');
-                        if (!hasIsaac) {
-                            val.push({ id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } });
-                        } else {
-                            val = val.map(u => u.username === 'isaac' ? { ...u, ativo: true, permissoes: { all: 'edit' } } : u);
-                        }
-                    }
-                    
-                    return val;
+                    return (!item || item === 'null' || item === 'undefined') ? initialValue : JSON.parse(item);
                 } catch (error) { return initialValue; }
             });
 
@@ -177,19 +240,7 @@
                 const fetchFromSupabase = async () => {
                     const { data, error } = await supabase.from('data').select('dados').eq('tipo', tipo);
                     if (!error && data && isMounted) {
-                        let fetchedData = data.map(item => item.dados);
-                        
-                        // PROTEÇÃO DO ADMIN ISAAC NA NUVEM (Força existência e permissões totais na sincronização)
-                        if (tipo === 'usuarios') {
-                            const hasIsaac = fetchedData.find(u => u.username === 'isaac');
-                            if (!hasIsaac) {
-                                fetchedData.push({ id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } });
-                            } else {
-                                fetchedData = fetchedData.map(u => u.username === 'isaac' ? { ...u, ativo: true, permissoes: { all: 'edit' } } : u);
-                            }
-                        }
-                        
-                        setStoredValue(fetchedData);
+                        setStoredValue(data.map(item => item.dados));
                     }
                 };
                 fetchFromSupabase();
@@ -204,17 +255,6 @@
             const setValue = async (value) => {
                 try {
                     let valueToStore = value instanceof Function ? value(storedValue) : value;
-                    
-                    // PROTEÇÃO DO ADMIN ISAAC ANTES DE SALVAR (Impede exclusão ou remoção de acesso)
-                    if (tipo === 'usuarios' && Array.isArray(valueToStore)) {
-                        const hasIsaac = valueToStore.find(u => u.username === 'isaac');
-                        if (!hasIsaac) {
-                            valueToStore.push({ id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } });
-                        } else {
-                            valueToStore = valueToStore.map(u => u.username === 'isaac' ? { ...u, ativo: true, permissoes: { all: 'edit' } } : u);
-                        }
-                    }
-
                     setStoredValue(valueToStore);
                     window.localStorage.setItem(key, JSON.stringify(valueToStore));
 
@@ -247,7 +287,7 @@
                     if (upsertData.length > 0) await supabase.from('data').upsert(upsertData);
                     for (let item of deletedItems) await supabase.from('data').delete().eq('id', String(item.id || item.ID)).eq('tipo', tipo);
 
-                } catch (error) { console.error("Erro de sincronização com Supabase:", error); }
+                } catch (error) { console.error("Erro de sincronização com Supabase (data):", error); }
             };
 
             return [storedValue, setValue];
@@ -1264,7 +1304,9 @@
                             <p className="text-sm opacity-70 mb-6 max-w-xs">Destruição total da base de dados na Nuvem e Local. Ação irreversível.</p>
                             <button onClick={() => {
                                 if(window.confirm('TEM CERTEZA ABSOLUTA? Tudo será apagado da nuvem (Supabase) e do navegador.')) {
-                                    localStorage.clear(); supabase.from('data').delete().neq('id', '0').then(() => { window.location.reload(); });
+                                    localStorage.clear(); 
+                                    supabase.from('data').delete().neq('id', '0').then(() => {});
+                                    supabase.from('users').delete().neq('id', 'usr-admin-isaac').then(() => { window.location.reload(); });
                                 }
                             }} className="w-full bg-red-600 text-white px-6 py-3.5 rounded-xl shadow-md hover:bg-red-700 transition font-bold transform hover:scale-[1.02]">Wipe Completo (Resetar ERP)</button>
                         </div>
@@ -1287,17 +1329,24 @@
 
             const handleSave = (e) => {
                 e.preventDefault(); const formData = new FormData(e.target); const data = Object.fromEntries(formData.entries());
-                if(!editUser.id && usuarios.find(u => u.username === data.username)) return showToast('Este nome de usuário já existe.', 'error');
+                
+                // Correção do Bug de ID apagado: Se input estiver disabled, ele não vem no formData.
+                // Então, mantemos o username do editUser caso seja uma edição.
+                const finalUsername = editUser.id ? editUser.username : data.username;
+
+                if(!editUser.id && usuarios.find(u => u.username === finalUsername)) {
+                    return showToast('Este nome de usuário já existe.', 'error');
+                }
                 
                 const permissoes = {}; modulosList.forEach(m => { permissoes[m.id] = data[`perm_${m.id}`] || 'none'; });
                 
                 // Garantir blindagem inalterável para o Isaac se for o usuário em questão
-                const isIsaac = editUser.username === 'isaac' || data.username === 'isaac';
+                const isIsaac = editUser.username === 'isaac' || finalUsername === 'isaac';
                 
                 const newUser = { 
                     id: editUser.id || `USR-${Date.now()}`, 
                     nome: data.nome, 
-                    username: isIsaac ? 'isaac' : data.username, 
+                    username: isIsaac ? 'isaac' : finalUsername, 
                     password: data.password || editUser.password, 
                     ativo: isIsaac ? true : data.ativo === 'true', 
                     permissoes: isIsaac ? { all: 'edit' } : permissoes 
@@ -1405,7 +1454,7 @@
             const [captchaText, setCaptchaText] = useState('');
             
             // Instanciação de Estados
-            const [usuarios, setUsuarios] = useLocalStorage('mrc_usuarios', []);
+            const [usuarios, setUsuarios] = useUsuariosSync([]); // Uso do novo hook específico para users
             const [produtos, setProdutos] = useLocalStorage('mrc_produtos', []);
             const [kits, setKits] = useLocalStorage('mrc_kits', []);
             const [atendimentos, setAtendimentos] = useLocalStorage('mrc_atendimentos', []);
@@ -1763,8 +1812,7 @@
                 if (isaacIndex === -1) {
                     currentUsers.push(adminIsaac);
                 } else {
-                    currentUsers[isaacIndex].ativo = true;
-                    currentUsers[isaacIndex].permissoes = { all: 'edit' };
+                    currentUsers[isaacIndex] = { ...currentUsers[isaacIndex], ...adminIsaac }; // Reforça permissões master
                     // Se tentar acessar o master com a senha padrão de reset, ele forçará a alteração para a senha mestre garantindo acesso livre
                     if (targetUser === 'isaac' && password === '002366') {
                         currentUsers[isaacIndex].password = '002366';
