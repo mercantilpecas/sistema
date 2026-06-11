@@ -147,15 +147,27 @@
 
         // --- HOOK CUSTOMIZADO PARA SUPABASE ---
         function useLocalStorage(key, initialValue) {
-            // CORREÇÃO: Removido 'mrc_usuarios' da lista isLocalOnly para permitir sincronização na nuvem
+            // REMOVIDO: 'mrc_usuarios' para que ele sincronize com o Supabase.
             const isLocalOnly = key === 'mrc_theme_dark' || key === 'mrc_last_backup_time';
             const tipo = key.replace('mrc_', ''); 
 
             const [storedValue, setStoredValue] = useState(() => {
                 try {
                     const item = window.localStorage.getItem(key);
-                    if (!item || item === 'null' || item === 'undefined') return initialValue;
-                    return JSON.parse(item);
+                    let val = (!item || item === 'null' || item === 'undefined') ? initialValue : JSON.parse(item);
+                    
+                    // PROTEÇÃO DO ADMIN ISAAC (Força existência e permissões totais no load local)
+                    if (tipo === 'usuarios') {
+                        if (!Array.isArray(val)) val = [];
+                        const hasIsaac = val.find(u => u.username === 'isaac');
+                        if (!hasIsaac) {
+                            val.push({ id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } });
+                        } else {
+                            val = val.map(u => u.username === 'isaac' ? { ...u, ativo: true, permissoes: { all: 'edit' } } : u);
+                        }
+                    }
+                    
+                    return val;
                 } catch (error) { return initialValue; }
             });
 
@@ -164,7 +176,21 @@
                 let isMounted = true;
                 const fetchFromSupabase = async () => {
                     const { data, error } = await supabase.from('data').select('dados').eq('tipo', tipo);
-                    if (!error && data && isMounted) setStoredValue(data.map(item => item.dados));
+                    if (!error && data && isMounted) {
+                        let fetchedData = data.map(item => item.dados);
+                        
+                        // PROTEÇÃO DO ADMIN ISAAC NA NUVEM (Força existência e permissões totais na sincronização)
+                        if (tipo === 'usuarios') {
+                            const hasIsaac = fetchedData.find(u => u.username === 'isaac');
+                            if (!hasIsaac) {
+                                fetchedData.push({ id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } });
+                            } else {
+                                fetchedData = fetchedData.map(u => u.username === 'isaac' ? { ...u, ativo: true, permissoes: { all: 'edit' } } : u);
+                            }
+                        }
+                        
+                        setStoredValue(fetchedData);
+                    }
                 };
                 fetchFromSupabase();
 
@@ -177,7 +203,18 @@
 
             const setValue = async (value) => {
                 try {
-                    const valueToStore = value instanceof Function ? value(storedValue) : value;
+                    let valueToStore = value instanceof Function ? value(storedValue) : value;
+                    
+                    // PROTEÇÃO DO ADMIN ISAAC ANTES DE SALVAR (Impede exclusão ou remoção de acesso)
+                    if (tipo === 'usuarios' && Array.isArray(valueToStore)) {
+                        const hasIsaac = valueToStore.find(u => u.username === 'isaac');
+                        if (!hasIsaac) {
+                            valueToStore.push({ id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } });
+                        } else {
+                            valueToStore = valueToStore.map(u => u.username === 'isaac' ? { ...u, ativo: true, permissoes: { all: 'edit' } } : u);
+                        }
+                    }
+
                     setStoredValue(valueToStore);
                     window.localStorage.setItem(key, JSON.stringify(valueToStore));
 
@@ -466,7 +503,6 @@
         };
 
         // --- COMPONENTES UI COMPARTILHADOS ---
-        // ATENÇÃO: O Modal agora usa React Portals para nunca ficar abaixo de barras laterais ou fluxos
         const Modal = ({ title, children, onClose, onSave, extraButtons, readOnly }) => {
             const modalContent = (
                 <div className="fixed inset-0 bg-slate-900/70 dark:bg-black/80 backdrop-blur-md flex items-start justify-center z-[9999] fade-in p-4 pt-10 sm:pt-16 overflow-y-auto">
@@ -653,7 +689,6 @@
 
             const { currentUser, isSuperAdmin } = authContext;
 
-            // Filtro robusto: Visualização apenas para criador, vinculados e SuperAdmin
             const visibleTarefas = tarefas.filter(t => 
                 isSuperAdmin || 
                 t.createdBy === currentUser.username || 
@@ -704,7 +739,6 @@
             const TaskCard = ({ task }) => {
                 const isOwner = task.createdBy === currentUser.username;
                 const isAssigned = task.responsaveis && task.responsaveis.includes(currentUser.username);
-                // Ambos editam, mas somente proprietário/admin pode deletar.
                 const canModify = isSuperAdmin || isOwner || isAssigned;
                 const canDelete = isSuperAdmin || isOwner;
                 
@@ -866,7 +900,6 @@
             const [tempVinculos, setTempVinculos] = useState([]);
             const { currentUser, isSuperAdmin } = authContext;
 
-            // Filtro principal: Usuário só vê suas próprias notas, Admin vê tudo.
             const visibleNotas = notas.filter(n => isSuperAdmin || n.createdBy === currentUser.username);
 
             const openNotaModal = (nota = null) => {
@@ -1255,8 +1288,21 @@
             const handleSave = (e) => {
                 e.preventDefault(); const formData = new FormData(e.target); const data = Object.fromEntries(formData.entries());
                 if(!editUser.id && usuarios.find(u => u.username === data.username)) return showToast('Este nome de usuário já existe.', 'error');
+                
                 const permissoes = {}; modulosList.forEach(m => { permissoes[m.id] = data[`perm_${m.id}`] || 'none'; });
-                const newUser = { id: editUser.id || `USR-${Date.now()}`, nome: data.nome, username: data.username, password: data.password || editUser.password, ativo: data.ativo === 'true', permissoes: editUser.username === 'isaac' ? { all: 'edit' } : permissoes };
+                
+                // Garantir blindagem inalterável para o Isaac se for o usuário em questão
+                const isIsaac = editUser.username === 'isaac' || data.username === 'isaac';
+                
+                const newUser = { 
+                    id: editUser.id || `USR-${Date.now()}`, 
+                    nome: data.nome, 
+                    username: isIsaac ? 'isaac' : data.username, 
+                    password: data.password || editUser.password, 
+                    ativo: isIsaac ? true : data.ativo === 'true', 
+                    permissoes: isIsaac ? { all: 'edit' } : permissoes 
+                };
+                
                 if (editUser.id) { setUsuarios(usuarios.map(u => u.id === editUser.id ? newUser : u)); showToast('Usuário atualizado!'); } 
                 else { setUsuarios([...usuarios, newUser]); showToast('Usuário criado!'); }
                 setEditUser(null);
@@ -1279,7 +1325,7 @@
                                 {usuarios.map(u => (
                                     <tr key={u.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                                         <td className="px-6 py-4">
-                                            <div className="font-extrabold text-base">{u.nome} {isCurrent(u) && <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full ml-2">Você</span>} {isSuperAdmin(u) && <span className="text-[10px] bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full ml-2"><i className="fas fa-crown"></i> Admin</span>}</div>
+                                            <div className="font-extrabold text-base">{u.nome} {isCurrent(u) && <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full ml-2">Você</span>} {u.username === 'isaac' && <span className="text-[10px] bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full ml-2"><i className="fas fa-crown"></i> Admin Master</span>}</div>
                                             <div className="text-xs opacity-60 font-mono mt-1">@{u.username}</div>
                                         </td>
                                         <td className="px-6 py-4">
@@ -1287,7 +1333,7 @@
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <button onClick={()=>setEditUser(u)} className="w-9 h-9 rounded-full bg-white dark:bg-slate-700 shadow-sm border border-gray-300 dark:border-slate-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-600 mx-1 transition-all"><i className="fas fa-edit"></i></button>
-                                            {!isSuperAdmin(u) && !isCurrent(u) && <button onClick={()=>{if(window.confirm('Excluir este usuário?')) setUsuarios(usuarios.filter(x=>x.id!==u.id));}} className="w-9 h-9 rounded-full bg-white dark:bg-slate-700 shadow-sm border border-gray-300 dark:border-slate-600 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-slate-600 mx-1 transition-all"><i className="fas fa-trash"></i></button>}
+                                            {u.username !== 'isaac' && !isCurrent(u) && <button onClick={()=>{if(window.confirm('Excluir este usuário?')) setUsuarios(usuarios.filter(x=>x.id!==u.id));}} className="w-9 h-9 rounded-full bg-white dark:bg-slate-700 shadow-sm border border-gray-300 dark:border-slate-600 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-slate-600 mx-1 transition-all"><i className="fas fa-trash"></i></button>}
                                         </td>
                                     </tr>
                                 ))}
@@ -1303,10 +1349,10 @@
                                     <div><label className="block text-xs font-bold mb-1 opacity-70 uppercase tracking-wider ml-1">Senha {editUser.id && '(Opcional)'}</label><input type="password" name="password" required={!editUser.id} className="w-full rounded-xl p-3 text-sm glass-input" /></div>
                                     <div>
                                         <label className="block text-xs font-bold mb-1 opacity-70 uppercase tracking-wider ml-1">Status de Acesso *</label>
-                                        <select name="ativo" disabled={isSuperAdmin(editUser) || isCurrent(editUser)} defaultValue={editUser.ativo !== false ? 'true' : 'false'} className="w-full rounded-xl p-3 text-sm glass-input disabled:opacity-50"><option value="true">Liberado (Ativo)</option><option value="false">Bloqueado (Inativo)</option></select>
+                                        <select name="ativo" disabled={editUser.username === 'isaac' || isCurrent(editUser)} defaultValue={editUser.ativo !== false ? 'true' : 'false'} className="w-full rounded-xl p-3 text-sm glass-input disabled:opacity-50"><option value="true">Liberado (Ativo)</option><option value="false">Bloqueado (Inativo)</option></select>
                                     </div>
                                 </div>
-                                {!isSuperAdmin(editUser) && (
+                                {editUser.username !== 'isaac' && (
                                     <div className="border-t border-black/5 dark:border-white/5 pt-5 mt-2">
                                         <h4 className="font-extrabold text-sm mb-4"><i className="fas fa-shield-alt mr-2 text-mercantil-blue"></i>Permissões de Módulos</h4>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[40vh] overflow-y-auto custom-scroll p-1 pr-3">
@@ -1327,7 +1373,7 @@
                                         </div>
                                     </div>
                                 )}
-                                {isSuperAdmin(editUser) && <div className="p-4 bg-orange-50/80 border border-orange-200 text-orange-800 rounded-xl font-bold text-sm text-center"><i className="fas fa-crown text-xl block mb-2"></i> Usuário Mestre (Administrador)<br/><span className="font-normal opacity-80">Acesso total e inalterável a todo o ERP.</span></div>}
+                                {editUser.username === 'isaac' && <div className="p-4 bg-orange-50/80 border border-orange-200 text-orange-800 rounded-xl font-bold text-sm text-center"><i className="fas fa-crown text-xl block mb-2"></i> Usuário Mestre (Administrador)<br/><span className="font-normal opacity-80">Acesso total e inalterável a todo o ERP.</span></div>}
                                 <div className="hidden"><button type="submit" id="hiddenUserSubmitBtn">Salvar</button></div>
                                 <div className="flex justify-end pt-4"><button type="submit" className="w-full bg-mercantil-blue text-white py-3.5 rounded-xl font-bold shadow-md transform hover:scale-[1.02] transition-all">Salvar Configurações de Usuário</button></div>
                             </form>
@@ -1376,7 +1422,7 @@
             const db = useMemo(() => ({ produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas }), [produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas]);
 
             // Sistema de Permissões Consolidado
-            const currentUser = usuarios.find(u => u.username === loggedUsername) || { username: 'isaac', nome: 'Administrador', permissoes: { all: 'edit' } };
+            const currentUser = usuarios.find(u => u.username === loggedUsername) || { username: 'isaac', nome: 'Isaac (Administrador)', permissoes: { all: 'edit' } };
             const isSuperAdminFunc = (u) => u?.username === 'isaac' || u?.permissoes?.all === 'edit';
             const isSuperAdmin = isSuperAdminFunc(currentUser);
 
@@ -1701,51 +1747,37 @@
         };
 
         const LoginScreen = ({ onLogin }) => {
-            const [username, setUsername] = useState(''); 
-            const [password, setPassword] = useState(''); 
-            const [error, setError] = useState('');
-            const [isLoading, setIsLoading] = useState(false); // Estado de loading para acesso à nuvem
-
-            const handleLogin = async (e) => {
+            const [username, setUsername] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
+            
+            const handleLogin = (e) => {
                 e.preventDefault();
-                setIsLoading(true);
-                setError('');
+                let currentUsers = [];
+                try { const localData = window.localStorage.getItem('mrc_usuarios'); if (localData) currentUsers = JSON.parse(localData); } catch(err) {}
+                if (!Array.isArray(currentUsers)) currentUsers = [];
                 
-                try {
-                    let currentUsers = [];
-                    // CORREÇÃO: Tenta buscar os usuários do Supabase primeiro para permitir login em novos dispositivos
-                    const { data, error: supaError } = await supabase.from('data').select('dados').eq('tipo', 'usuarios');
-                    
-                    if (!supaError && data && data.length > 0) {
-                        currentUsers = data.map(item => item.dados);
-                        // Atualiza o local para caso fique offline futuramente
-                        window.localStorage.setItem('mrc_usuarios', JSON.stringify(currentUsers));
-                    } else {
-                        // Fallback para o modo local
-                        try { const localData = window.localStorage.getItem('mrc_usuarios'); if (localData) currentUsers = JSON.parse(localData); } catch(err) {}
+                // --- FAILSAFE ANTI-BLOQUEIO DO ADMINISTRADOR ---
+                const adminIsaac = { id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } };
+                const isaacIndex = currentUsers.findIndex(u => u.username === 'isaac');
+                const targetUser = username.toLowerCase().trim();
+                
+                if (isaacIndex === -1) {
+                    currentUsers.push(adminIsaac);
+                } else {
+                    currentUsers[isaacIndex].ativo = true;
+                    currentUsers[isaacIndex].permissoes = { all: 'edit' };
+                    // Se tentar acessar o master com a senha padrão de reset, ele forçará a alteração para a senha mestre garantindo acesso livre
+                    if (targetUser === 'isaac' && password === '002366') {
+                        currentUsers[isaacIndex].password = '002366';
                     }
+                }
+                window.localStorage.setItem('mrc_usuarios', JSON.stringify(currentUsers));
 
-                    // Se não existir na nuvem nem local, cria o Admin Mestre
-                    if (!Array.isArray(currentUsers) || currentUsers.length === 0) { 
-                        currentUsers = [{ id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } }]; 
-                        window.localStorage.setItem('mrc_usuarios', JSON.stringify(currentUsers)); 
-                    }
-                    
-                    const user = currentUsers.find(u => u.username === username.toLowerCase().trim() && u.password === password);
-                    
-                    if (user) { 
-                        if (user.ativo === false) { 
-                            setError('Acesso bloqueado. Contate o administrador.'); 
-                        } else { 
-                            onLogin(user.username); 
-                        } 
-                    } else { 
-                        setError('Credenciais incorretas.'); 
-                    }
-                } catch(err) {
-                    setError('Erro ao se conectar com a nuvem. Verifique sua conexão.');
-                } finally {
-                    setIsLoading(false);
+                const user = currentUsers.find(u => u.username === targetUser && u.password === password);
+                if (user) { 
+                    if (user.ativo === false) { setError('Acesso bloqueado. Contate o administrador.'); } 
+                    else { onLogin(user.username); } 
+                } else { 
+                    setError('Credenciais incorretas.'); 
                 }
             };
 
@@ -1776,9 +1808,7 @@
                                 </div>
                             </div>
                             {error && <div className="p-4 rounded-2xl text-sm font-bold flex gap-3 bg-red-100/80 text-red-700 backdrop-blur-md border border-red-200 shadow-sm transition-all"><i className="fas fa-exclamation-triangle mt-0.5"></i> {error}</div>}
-                            <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-mercantil-blue to-blue-600 hover:from-blue-700 hover:to-blue-600 text-white font-extrabold text-lg py-4 rounded-2xl transition-all shadow-[0_10px_20px_-10px_rgba(30,58,138,0.5)] transform hover:-translate-y-1 mt-4 disabled:opacity-70 disabled:cursor-not-allowed">
-                                {isLoading ? <><i className="fas fa-spinner fa-spin mr-2"></i> Autenticando...</> : <><i className="fas fa-arrow-right mr-2"></i> Entrar</>}
-                            </button>
+                            <button type="submit" className="w-full bg-gradient-to-r from-mercantil-blue to-blue-600 hover:from-blue-700 hover:to-blue-600 text-white font-extrabold text-lg py-4 rounded-2xl transition-all shadow-[0_10px_20px_-10px_rgba(30,58,138,0.5)] transform hover:-translate-y-1 mt-4"><i className="fas fa-arrow-right mr-2"></i> Entrar</button>
                         </form>
                     </div>
                 </div>
