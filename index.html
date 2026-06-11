@@ -692,11 +692,39 @@
             const [editModal, setEditModal] = useState(null);
             const [search, setSearch] = useState('');
             
-            const filtered = Array.isArray(data) ? data.filter(item => 
-                item && typeof item === 'object' && Object.values(item).some(val => 
-                    val !== null && val !== undefined && String(val).toLowerCase().includes(search.toLowerCase())
-                )
-            ) : [];
+            // Função de busca profunda que ignora formatações de números e busca em objetos internos
+            const searchMatches = (item, query) => {
+                if (!query) return true;
+                const qLower = query.toLowerCase();
+                const qNum = query.replace(/\D/g, ''); // Apenas números da query
+
+                const checkValue = (val) => {
+                    if (val === null || val === undefined) return false;
+                    // Se for string ou número
+                    if (typeof val === 'string' || typeof val === 'number') {
+                        const strVal = String(val).toLowerCase();
+                        // 1. Tenta match normal (nomes, e-mails)
+                        if (strVal.includes(qLower)) return true;
+                        // 2. Tenta match apenas com números (ignorando máscaras do val e da query)
+                        if (qNum.length > 0 && String(val).replace(/\D/g, '').includes(qNum)) return true;
+                        return false;
+                    }
+                    // Se for array (ex: Lista de contatos)
+                    if (Array.isArray(val)) {
+                        return val.some(v => checkValue(v));
+                    }
+                    // Se for objeto interno (ex: {tipo: 'Telefone', valor: '(11) 999...'})
+                    if (typeof val === 'object') {
+                        return Object.values(val).some(v => checkValue(v));
+                    }
+                    return false;
+                };
+
+                // Percorre todos os campos do item principal do BaseManager
+                return Object.values(item).some(val => checkValue(val));
+            };
+
+            const filtered = Array.isArray(data) ? data.filter(item => item && typeof item === 'object' && searchMatches(item, search)) : [];
 
             const handleSave = () => {
                 if(readOnly) return;
@@ -818,6 +846,10 @@
                 const option = getGlobalLinkOptions(currentVinculoTipo, db).find(o => o.id === currentVinculoId);
                 if (option && !tempVinculos.some(v => v.tipo === currentVinculoTipo && v.id === currentVinculoId)) setTempVinculos([...tempVinculos, { tipo: currentVinculoTipo, id: currentVinculoId, label: option.label }]);
                 setCurrentVinculoId('');
+            };
+
+            const removeVinculo = (idx) => {
+                setTempVinculos(tempVinculos.filter((_, i) => i !== idx));
             };
 
             const addResponsavel = () => {
@@ -979,7 +1011,13 @@
                                             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-2 bg-black/5 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5">
                                                 <div className="md:col-span-4">
                                                     <label className="block text-xs font-bold mb-1 opacity-70">Módulo</label>
-                                                    <select value={currentVinculoTipo} onChange={(e) => { setCurrentVinculoTipo(e.target.value); setCurrentVinculoId(''); }} className="w-full rounded-lg p-2 text-sm glass-input"><option value="">Selecione...</option><option value="Produtos">Produtos</option><option value="Kits">Kits</option><option value="CRM (Atendimentos)">CRM</option></select>
+                                                    <select value={currentVinculoTipo} onChange={(e) => { setCurrentVinculoTipo(e.target.value); setCurrentVinculoId(''); }} className="w-full rounded-lg p-2 text-sm glass-input">
+                                                        <option value="">Selecione...</option>
+                                                        <option value="Produtos">Produtos</option>
+                                                        <option value="Kits">Kits</option>
+                                                        <option value="CRM (Atendimentos)">CRM</option>
+                                                        <option value="Devoluções">Devoluções</option>
+                                                    </select>
                                                 </div>
                                                 <div className="md:col-span-6">
                                                     <label className="block text-xs font-bold mb-1 opacity-70">Registro</label>
