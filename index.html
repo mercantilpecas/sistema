@@ -525,7 +525,7 @@
                                             ) : (
                                                 <input readOnly={f.readOnly || readOnly} required={f.required} type={f.type||'text'} min={f.min} step={f.step} className="w-full rounded-xl p-3 text-sm glass-input read-only:opacity-80" value={data[f.name]||''} onChange={e => setData({...data, [f.name]: e.target.value})} placeholder={f.placeholder || ''} />
                                             )}
-                                            {f.button && !readOnly && (
+                                            {f.button && !readOnly && !data[f.name] && (
                                                 <button type="button" onClick={() => f.action(setData)} className="w-full sm:w-auto bg-mercantil-blue text-white px-5 py-2.5 rounded-xl shadow-md hover:bg-blue-800 whitespace-nowrap text-sm font-bold flex items-center justify-center transition transform hover:scale-[1.02]">
                                                     <i className={`${f.icon || "fas fa-bolt"} mr-2`}></i> {f.button}
                                                 </button>
@@ -1420,7 +1420,7 @@
             const [notas, setNotas] = useLocalStorage('mrc_notas', []);
             const [lastBackup, setLastBackup] = useLocalStorage('mrc_last_backup_time', null);
 
-            const db = useMemo(() => ({ produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas }), [produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas]);
+            const db = useMemo(() => ({ produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas, usuarios }), [produtos, kits, atendimentos, devolucoes, qualidade, fretes, marketing, gerencia, compliance, tarefas, notas, usuarios]);
 
             // Sistema de Permissões Consolidado
             const currentUser = usuarios.find(u => u.username === loggedUsername) || adminIsaac;
@@ -1475,6 +1475,8 @@
             const actionProtocolCRM = (set) => { const dt = new Date(); const p = `PRT-${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}-${String(dt.getHours()).padStart(2,'0')}${String(dt.getMinutes()).padStart(2,'0')}${String(dt.getSeconds()).padStart(2,'0')}`; set(prev => ({...prev, protocolo: p, dataHoraOficial: dt.toISOString()})); showToast('Protocolo gerado.', 'success'); };
             const actionProtocolDEV = (set) => { const dt = new Date(); const p = `DEV-${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}-${String(dt.getHours()).padStart(2,'0')}${String(dt.getMinutes()).padStart(2,'0')}${String(dt.getSeconds()).padStart(2,'0')}`; set(prev => ({...prev, protocolo: p, dataHoraOficial: dt.toISOString()})); showToast('Protocolo DEV gerado.', 'success'); };
 
+            const usuarioOptions = usuarios && usuarios.length > 0 ? usuarios.filter(u => u.ativo).map(u => u.nome) : [];
+
             const crmConfig = [
                 { name: 'protocolo', label: 'Protocolo de Atendimento *', type: 'text', readOnly: true, button: 'Gerar Oficial', icon: 'fas fa-fingerprint', full: true, required: true, action: actionProtocolCRM },
                 { name: 'cliente', label: 'Nome / Oficina (Cliente) *', type: 'text', required: true, half: true },
@@ -1483,6 +1485,7 @@
                 { name: 'motivo', label: 'Motivo / Assunto', type: 'select', options: ['Dúvida Técnica (Motor/Peças)', 'Cotação de Peças', 'Atraso na Entrega', 'Garantia / Defeito / Troca', 'Reclamação de Atendimento', 'Elogio / Sugestão'], half: true },
                 { name: 'itensVinculados', label: 'Produtos e Kits', type: 'vinculos_comerciais', full: true, produtos: produtoOptions, kits: kitOptions },
                 { name: 'regiaoVinculada', label: 'Região / Frete', type: 'select', options: freteOptions, half: true },
+                { name: 'usuarioVinculado', label: 'Usuário Responsável', type: 'select', options: usuarioOptions, half: true },
                 { name: 'status', label: 'Status *', type: 'select', options: ['Aberto - Aguardando Resolução', 'Em Andamento', 'Aguardando Cliente', 'Resolvido', 'Cancelado'], required: true, half: true },
                 { name: 'historico_obs', label: 'Histórico de Observações (Relatos)', type: 'history_log', full: true }
             ];
@@ -1494,6 +1497,7 @@
                 { name: 'embalagem', label: 'Embalagem *', type: 'select', options: ['Original', 'Modificada', 'Outros'], required: true, half: true },
                 { name: 'estado', label: 'Estado *', type: 'select', options: ['Perfeito', 'Avariado', 'Faltando Peças', 'Usado', 'Outros'], required: true, half: true },
                 { name: 'status', label: 'Status', type: 'select', options: ['Aguardando Chegada', 'Em Conferência', 'Finalizado - Reintegrado', 'Finalizado - Descarte', 'Em Disputa/Mediação'], half: true },
+                { name: 'usuarioVinculado', label: 'Usuário Responsável', type: 'select', options: usuarioOptions, half: true },
                 { name: 'motivo', label: 'Motivo *', type: 'textarea', full: true, required: true },
                 { name: 'itensVinculados', label: 'Produtos/Kits', type: 'vinculos_comerciais', full: true, produtos: produtoOptions, kits: kitOptions },
                 { name: 'vinculos', label: 'Outros Vínculos', type: 'vinculos_globais', full: true }
