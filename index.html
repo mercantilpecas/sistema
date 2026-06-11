@@ -147,7 +147,8 @@
 
         // --- HOOK CUSTOMIZADO PARA SUPABASE ---
         function useLocalStorage(key, initialValue) {
-            const isLocalOnly = key === 'mrc_theme_dark' || key === 'mrc_last_backup_time' || key === 'mrc_usuarios';
+            // CORREÇÃO: Removido 'mrc_usuarios' da lista isLocalOnly para permitir sincronização na nuvem
+            const isLocalOnly = key === 'mrc_theme_dark' || key === 'mrc_last_backup_time';
             const tipo = key.replace('mrc_', ''); 
 
             const [storedValue, setStoredValue] = useState(() => {
@@ -1700,14 +1701,52 @@
         };
 
         const LoginScreen = ({ onLogin }) => {
-            const [username, setUsername] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
-            const handleLogin = (e) => {
+            const [username, setUsername] = useState(''); 
+            const [password, setPassword] = useState(''); 
+            const [error, setError] = useState('');
+            const [isLoading, setIsLoading] = useState(false); // Estado de loading para acesso à nuvem
+
+            const handleLogin = async (e) => {
                 e.preventDefault();
-                let currentUsers = [];
-                try { const localData = window.localStorage.getItem('mrc_usuarios'); if (localData) currentUsers = JSON.parse(localData); } catch(err) {}
-                if (!Array.isArray(currentUsers) || currentUsers.length === 0) { currentUsers = [{ id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } }]; window.localStorage.setItem('mrc_usuarios', JSON.stringify(currentUsers)); }
-                const user = currentUsers.find(u => u.username === username.toLowerCase().trim() && u.password === password);
-                if (user) { if (user.ativo === false) { setError('Acesso bloqueado. Contate o administrador.'); } else { onLogin(user.username); } } else { setError('Credenciais incorretas.'); }
+                setIsLoading(true);
+                setError('');
+                
+                try {
+                    let currentUsers = [];
+                    // CORREÇÃO: Tenta buscar os usuários do Supabase primeiro para permitir login em novos dispositivos
+                    const { data, error: supaError } = await supabase.from('data').select('dados').eq('tipo', 'usuarios');
+                    
+                    if (!supaError && data && data.length > 0) {
+                        currentUsers = data.map(item => item.dados);
+                        // Atualiza o local para caso fique offline futuramente
+                        window.localStorage.setItem('mrc_usuarios', JSON.stringify(currentUsers));
+                    } else {
+                        // Fallback para o modo local
+                        try { const localData = window.localStorage.getItem('mrc_usuarios'); if (localData) currentUsers = JSON.parse(localData); } catch(err) {}
+                    }
+
+                    // Se não existir na nuvem nem local, cria o Admin Mestre
+                    if (!Array.isArray(currentUsers) || currentUsers.length === 0) { 
+                        currentUsers = [{ id: 'usr-admin-isaac', username: 'isaac', password: '002366', nome: 'Isaac (Administrador)', ativo: true, permissoes: { all: 'edit' } }]; 
+                        window.localStorage.setItem('mrc_usuarios', JSON.stringify(currentUsers)); 
+                    }
+                    
+                    const user = currentUsers.find(u => u.username === username.toLowerCase().trim() && u.password === password);
+                    
+                    if (user) { 
+                        if (user.ativo === false) { 
+                            setError('Acesso bloqueado. Contate o administrador.'); 
+                        } else { 
+                            onLogin(user.username); 
+                        } 
+                    } else { 
+                        setError('Credenciais incorretas.'); 
+                    }
+                } catch(err) {
+                    setError('Erro ao se conectar com a nuvem. Verifique sua conexão.');
+                } finally {
+                    setIsLoading(false);
+                }
             };
 
             return (
@@ -1737,7 +1776,9 @@
                                 </div>
                             </div>
                             {error && <div className="p-4 rounded-2xl text-sm font-bold flex gap-3 bg-red-100/80 text-red-700 backdrop-blur-md border border-red-200 shadow-sm transition-all"><i className="fas fa-exclamation-triangle mt-0.5"></i> {error}</div>}
-                            <button type="submit" className="w-full bg-gradient-to-r from-mercantil-blue to-blue-600 hover:from-blue-700 hover:to-blue-600 text-white font-extrabold text-lg py-4 rounded-2xl transition-all shadow-[0_10px_20px_-10px_rgba(30,58,138,0.5)] transform hover:-translate-y-1 mt-4"><i className="fas fa-arrow-right mr-2"></i> Entrar</button>
+                            <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-mercantil-blue to-blue-600 hover:from-blue-700 hover:to-blue-600 text-white font-extrabold text-lg py-4 rounded-2xl transition-all shadow-[0_10px_20px_-10px_rgba(30,58,138,0.5)] transform hover:-translate-y-1 mt-4 disabled:opacity-70 disabled:cursor-not-allowed">
+                                {isLoading ? <><i className="fas fa-spinner fa-spin mr-2"></i> Autenticando...</> : <><i className="fas fa-arrow-right mr-2"></i> Entrar</>}
+                            </button>
                         </form>
                     </div>
                 </div>
