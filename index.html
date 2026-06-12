@@ -1289,7 +1289,8 @@
                             <p className="text-sm mb-6 opacity-70 font-medium"><i className="fas fa-info-circle mr-2"></i>Editor simplificado para fretes. Recomendamos importar via XLSX na aba Dados & Backup.</p>
                             <div className="overflow-x-auto custom-scroll border border-black/5 dark:border-white/5 rounded-2xl">
                                 <table className="w-full text-left text-sm whitespace-nowrap">
-                                    <thead className="bg-black/5 dark:bg-white/5 text-xs uppercase tracking-wider font-extrabold opacity-70"><tr><th className="p-4">Cidade</th><th className="p-4">CEP Ini</th><th className="p-4">CEP Fim</th><th className="p-4 text-right">Valor R$</th>{canDelete && <th className="p-4 text-center">Ação</th>}</tr></thead>
+                                    <thead className="bg-black/5 dark:bg-white/5 text-xs uppercase tracking-wider font-extrabold opacity-70"><tr><th className="p-4">Cidade</th><th className="p-4">CEP Ini</th><th className="p-4">CEP Fim</th><th className="p-4 text-right">Valor R$</th>{canDelete && <th className="p-4 text-center">Ação</th>}</tr>
+                                    </thead>
                                     <tbody className="divide-y divide-black/5 dark:divide-white/5">
                                         {data.map(row => (
                                             <tr key={row.id} className="hover:bg-black/5 dark:hover:bg-white/5">
@@ -1837,8 +1838,11 @@
                 { name: 'status', label: 'Status', type: 'select', options: ['Vigente', 'Em Revisão', 'Obsoleta'], half: true }, { name: 'descricao', label: 'Resumo', type: 'textarea', full: true }
             ];
 
+            // INÍCIO: ADIÇÃO DO CAMPO "Código no SS" nos formulários de Produtos e Kits
             const produtosConfig = [
-                { name: 'SKU', label: 'SKU *', required: true, half: true }, { name: 'Título', label: 'Título Produto *', required: true, full: true }, 
+                { name: 'SKU', label: 'SKU *', required: true, half: true },
+                { name: 'CodigoSS', label: 'Código no SS', type: 'text', half: true },
+                { name: 'Título', label: 'Título Produto *', required: true, full: true }, 
                 { name: 'Status', label: 'Status', type: 'select', options: ['Ativo', 'Inativo', 'Rascunho'] }, { name: 'Índice', label: 'Índice' }, { name: 'Material', label: 'Material' }, 
                 { name: 'Status Fiscal', label: 'Status Fiscal' }, { name: 'Status Dimensões', label: 'Status Dimensões', half: true }, { name: 'Peso (kg)', label: 'Peso (kg)', type: 'number', step: '0.001', half: true }, 
                 { name: 'Comprimento (cm)', label: 'Comp.', type: 'number', step: '0.1' }, { name: 'Largura (cm)', label: 'Largura', type: 'number', step: '0.1' }, { name: 'Altura (cm)', label: 'Altura', type: 'number', step: '0.1' }, 
@@ -1846,15 +1850,19 @@
             ];
 
             const kitsConfig = [
-                { name: 'SKU', label: 'SKU Kit *', required: true, half: true }, { name: 'Título', label: 'Título Kit *', required: true, full: true }, 
+                { name: 'SKU', label: 'SKU Kit *', required: true, half: true },
+                { name: 'CodigoSS', label: 'Código no SS', type: 'text', half: true },
+                { name: 'Título', label: 'Título Kit *', required: true, full: true }, 
                 { name: 'Status', label: 'Status', type: 'select', options: ['Ativo', 'Inativo', 'Rascunho'] }, { name: 'Índice', label: 'Índice' }, { name: 'Material', label: 'Material' }, 
                 { name: 'Status Fiscal', label: 'Status Fiscal' }, { name: 'Status Dimensões', label: 'Status Dimensões', half: true }, { name: 'Peso (kg)', label: 'Peso Total', type: 'number', step: '0.001', half: true }, 
                 { name: 'Comprimento (cm)', label: 'Comp.', type: 'number', step: '0.1' }, { name: 'Largura (cm)', label: 'Largura', type: 'number', step: '0.1' }, { name: 'Altura (cm)', label: 'Altura', type: 'number', step: '0.1' }, 
                 { name: 'EAN/GTIN', label: 'EAN/GTIN', type: 'textarea', full: true }, { name: 'Observações', label: 'Composição', type: 'textarea', full: true }
             ];
+            // FIM: ADIÇÃO DO CAMPO "Código no SS"
 
             const catalogColumns = [
                 { field: 'SKU', header: 'SKU', render: (val) => <span className="font-mono font-extrabold cursor-pointer hover:text-mercantil-blue transition-colors" onClick={(e)=>{ e.stopPropagation(); copyToClipboard(val, showToast); }}><i className="fas fa-tag opacity-50 mr-1"></i> {val}</span> },
+                { field: 'CodigoSS', header: 'Código SS', render: (val) => val ? <span className="font-mono text-xs font-bold bg-black/5 dark:bg-white/5 px-2 py-1 rounded-md">{val}</span> : <span className="opacity-40 text-xs italic">---</span> },
                 { field: 'Título', header: 'Título', render: (val) => <span className="font-bold"><i className="fas fa-box opacity-40 mr-1"></i>{val}</span> },
                 { field: 'Status', header: 'Status', render: (val) => <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${val==='Ativo'?'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400':'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'}`}><i className={`fas ${val==='Ativo'?'fa-circle-check':'fa-circle-xmark'} mr-1`}></i>{val || 'N/A'}</span> },
                 { field: 'EAN/GTIN', header: 'EAN', render: (val) => val ? <span className="opacity-60 text-xs font-mono"><i className="fas fa-barcode opacity-70 mr-1"></i>{String(val).substring(0,10)}...</span> : <span className="opacity-40 text-xs italic"><i className="fas fa-barcode opacity-40 mr-1"></i>Sem EAN</span> }
@@ -1974,7 +1982,7 @@
                             </nav>
                             <div className="p-5 border-t border-black/5 dark:border-white/5 bg-white/30 dark:bg-black/20 text-center flex items-center justify-center gap-3">
                                 <button onClick={() => setDarkMode(!darkMode)} className="w-10 h-10 rounded-full bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/20 transition-colors flex items-center justify-center"><i className={`fas ${darkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-slate-600'} text-lg`}></i></button>
-                                <span className="text-xs font-bold opacity-50">V 5.2 (Liquid UI)</span>
+                                <span className="text-xs font-bold opacity-50">V 6.0 (Liquid UI)</span>
                             </div>
                         </aside>
                     </div>
